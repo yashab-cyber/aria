@@ -28,7 +28,7 @@ class AudioManager:
             else:
                 self.browser_audio_callback(audio_bytes)
 
-    def process_webm_to_text(self, webm_bytes: bytes, language: str = "en-US") -> str:
+    async def process_webm_to_text(self, webm_bytes: bytes, language: str = "en-US") -> str:
         """Convert incoming WebM audio from browser to WAV and transcribe it."""
         try:
             # Save bytes to a temporary webm file
@@ -41,16 +41,20 @@ class AudioManager:
             audio = AudioSegment.from_file(temp_webm_path, format="webm")
             audio.export(wav_path, format="wav")
 
-            # Transcribe
-            recognizer = sr.Recognizer()
-            with sr.AudioFile(wav_path) as source:
-                audio_data = recognizer.record(source)
-                try:
-                    text = recognizer.recognize_google(audio_data, language=language)
-                except sr.UnknownValueError:
-                    text = "Could not understand audio"
-                except sr.RequestError as e:
-                    text = f"Speech recognition request failed: {e}"
+            from modules.audio.stt.google_adapter import GoogleSTTAdapter
+            from modules.audio.stt.whisper_adapter import WhisperSTTAdapter
+            from config import config
+            
+            # Select adapter based on API key availability
+            if config.openai_api_key:
+                stt = WhisperSTTAdapter()
+            else:
+                stt = GoogleSTTAdapter()
+                
+            # Run the file transcription asynchronously by wrapping it for sync context (since process_webm_to_text is called sync currently)
+            # Actually process_webm_to_text is called from a websocket loop asynchronously, but wait, it's NOT async in the original code!
+            # Let's fix process_webm_to_text to be async.
+            text = await stt.transcribe_audio_file(wav_path, language=language)
 
             # Cleanup
             os.remove(temp_webm_path)

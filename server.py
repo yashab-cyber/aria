@@ -140,7 +140,7 @@ async def audio_websocket_endpoint(websocket: WebSocket):
             active_voice = voice_pack_manager.get_active_voice()
             stt_lang = active_voice.get("stt_language", "en-US")
             
-            text = audio_manager.process_webm_to_text(data, language=stt_lang)
+            text = await audio_manager.process_webm_to_text(data, language=stt_lang)
             
             if text and text != "Could not understand audio" and not text.startswith("Error") and not text.startswith("Speech recognition request failed"):
                 # Send the transcribed text back so the UI can show it,

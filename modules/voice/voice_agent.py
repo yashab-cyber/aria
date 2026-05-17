@@ -1,12 +1,20 @@
 import os
-import pyttsx3
-import speech_recognition as sr
 import asyncio
 from core.tool_registry import aria_tool
+from config import config
 
 class VoiceAgent:
     def __init__(self):
-        self.engine = None
+        self._listening_continuously = False
+        self._continuous_task = None
+        self._get_stt_adapter() # warm up
+
+    def _get_stt_adapter(self):
+        from modules.audio.stt.google_adapter import GoogleSTTAdapter
+        from modules.audio.stt.whisper_adapter import WhisperSTTAdapter
+        if config.openai_api_key:
+            return WhisperSTTAdapter()
+        return GoogleSTTAdapter()
 
     @aria_tool(name="speak", description="Synthesizes text into spoken audio.")
     async def speak(self, text: str) -> str:
@@ -39,31 +47,74 @@ class VoiceAgent:
         except Exception as e:
             return f"Error speaking: {str(e)}"
 
-    @aria_tool(name="listen", description="Activates microphone, listens to the user, and transcribes audio to text.")
-    async def listen(self) -> str:
+    @aria_tool(name="listen", description="Activates microphone, listens to the user for a single phrase, and transcribes audio to text.")
+    async def listen(self, language: str = "en-US") -> str:
         try:
-            loop = asyncio.get_event_loop()
-            transcription = await loop.run_in_executor(None, self._listen_sync)
-            return transcription
+            stt = self._get_stt_adapter()
+            transcription = await stt.transcribe_microphone(language=language)
+            return transcription if transcription else "No speech detected."
         except Exception as e:
             return f"Error listening: {str(e)}"
 
-    def _listen_sync(self) -> str:
-        recognizer = sr.Recognizer()
-        with sr.Microphone() as source:
-            print("Listening...")
-            # Adjust for ambient noise briefly
-            recognizer.adjust_for_ambient_noise(source, duration=0.5)
-            # Listen for up to 5 seconds of audio
-            audio = recognizer.listen(source, timeout=5, phrase_time_limit=10)
-        
+    @aria_tool(name="transcribe_audio_file", description="Reads an audio file (.wav, .mp3) and transcribes the speech to text.")
+    async def transcribe_audio_file(self, file_path: str, language: str = "en-US") -> str:
+        if not os.path.exists(file_path):
+            return f"File not found: {file_path}"
         try:
-            # Using Google Web Speech API for simplicity (requires internet)
-            text = recognizer.recognize_google(audio)
-            return text
-        except sr.UnknownValueError:
-            return "Could not understand audio"
-        except sr.RequestError as e:
-            return f"Could not request results; {e}"
+            stt = self._get_stt_adapter()
+            return await stt.transcribe_audio_file(file_path, language=language)
+        except Exception as e:
+            return f"Error transcribing file: {str(e)}"
+
+    @aria_tool(name="translate_audio_file", description="Reads an audio file, transcribes it, and translates the text to English.")
+    async def translate_audio_file(self, file_path: str) -> str:
+        transcript = await self.transcribe_audio_file(file_path)
+        if transcript.startswith("Error") or transcript.startswith("File not found"):
+            return transcript
+            
+        # Use LLM to translate
+        from litellm import acompletion
+        try:
+            response = await acompletion(
+                model=config.aria_model,
+                messages=[{"role": "user", "content": f"Translate this text to English exactly, without adding commentary: {transcript}"}],
+                api_base=config.api_base
+            )
+            return f"Original Transcript: {transcript}\n\nEnglish Translation: {response.choices[0].message.content}"
+        except Exception as e:
+            return f"Error translating transcript: {str(e)}"
+
+    @aria_tool(name="start_continuous_listening", description="Starts listening in the background for a wake word (e.g. 'Aria') to interact proactively.")
+    async def start_continuous_listening(self) -> str:
+        if self._listening_continuously:
+            return "Already listening in the background."
+            
+        self._listening_continuously = True
+        
+        async def _background_listen_loop():
+            stt = self._get_stt_adapter()
+            print("[VoiceAgent] Background listening started...")
+            while self._listening_continuously:
+                text = await stt.transcribe_microphone(timeout=3, phrase_time_limit=5)
+                if text and ("aria" in text.lower() or "arya" in text.lower()):
+                    print(f"[VoiceAgent] Wake word detected in: '{text}'")
+                    # Here we would inject into the orchestrator. For now, it just prints.
+                    # from core.aria import orchestrator
+                    # ... processing logic
+                await asyncio.sleep(0.5)
+                
+        self._continuous_task = asyncio.create_task(_background_listen_loop())
+        return "Continuous listening started. A.R.I.A is now listening for the wake word."
+
+    @aria_tool(name="stop_continuous_listening", description="Stops the continuous listening background task.")
+    async def stop_continuous_listening(self) -> str:
+        if not self._listening_continuously:
+            return "Not currently listening continuously."
+            
+        self._listening_continuously = False
+        if self._continuous_task:
+            self._continuous_task.cancel()
+            self._continuous_task = None
+        return "Continuous listening stopped."
 
 voice_agent = VoiceAgent()
