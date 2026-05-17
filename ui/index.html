@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>A.R.I.A. Interface</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <!-- Cinematic Boot Overlay -->
+    <div id="boot-overlay" class="boot-overlay">
+      <div class="boot-content">
+        <i data-lucide="cpu" class="boot-logo"></i>
+        <h2>A.R.I.A. OS</h2>
+        <div class="boot-text" id="boot-text">Initializing Systems...</div>
+      </div>
+    </div>
+
+    <div id="app">
+      <header class="top-bar">
+        <div class="brand">
+          <div class="ai-core idle" id="ai-core">
+            <div class="core-inner"></div>
+            <div class="core-ring"></div>
+            <div class="core-ring outer"></div>
+          </div>
+          <h1>A.R.I.A. <span class="status-indicator online"></span></h1>
+        </div>
+        <div class="system-stats" id="sys-stats">
+          <span class="stat"><i data-lucide="activity"></i> CPU: <span id="cpu-val">--%</span></span>
+          <span class="stat"><i data-lucide="memory-stick"></i> RAM: <span id="ram-val">--%</span></span>
+        </div>
+      </header>
+      
+      <main class="dashboard">
+        <div class="panel chat-panel">
+          <div class="panel-header">
+            <h2><i data-lucide="message-square"></i> Communication Link</h2>
+          </div>
+          <div class="chat-history" id="chat-history">
+            <div class="message aria">
+              <div class="avatar"><i data-lucide="cpu"></i></div>
+              <div class="content">A.R.I.A. initialized. Awaiting input.</div>
+            </div>
+          </div>
+          <div class="chat-input-container">
+            <button id="mic-btn" title="Voice Input"><i data-lucide="mic"></i></button>
+            <input type="text" id="chat-input" placeholder="Enter command or query..." autocomplete="off">
+            <button id="send-btn"><i data-lucide="send"></i></button>
+          </div>
+        </div>
+        
+        <div class="side-panels">
+          <div class="panel modules-panel">
+            <div class="panel-header">
+              <h2><i data-lucide="layers"></i> Active Modules</h2>
+            </div>
+            <ul class="module-list">
+              <li><i data-lucide="terminal"></i> System Control <span class="badge active">Active</span></li>
+              <li><i data-lucide="globe"></i> Browser Engine <span class="badge active">Active</span></li>
+              <li><i data-lucide="code"></i> Code Sandbox <span class="badge active">Active</span></li>
+              <li><i data-lucide="database"></i> Chroma Memory <span class="badge active">Active</span></li>
+              <li>
+                <i data-lucide="headphones"></i> Audio Mode
+                <select id="audio-mode-select" class="mode-select">
+                  <option value="browser_audio">Browser Audio</option>
+                  <option value="raspberrypi_audio">Local Hardware</option>
+                </select>
+              </li>
+              <li>
+                <button id="voice-config-btn" class="voice-btn">
+                  <i data-lucide="mic-2"></i> Voice Configuration
+                </button>
+              </li>
+            </ul>
+          </div>
+          
+          <div class="panel activity-panel">
+            <div class="panel-header">
+              <h2><i data-lucide="activity"></i> System Logs</h2>
+            </div>
+            <div class="log-container" id="log-container">
+              <div class="log-entry info">System initialized.</div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+    
+    <!-- Voice Config Modal -->
+    <div id="voice-modal" class="modal-overlay hidden">
+      <div class="modal-content voice-modal-box">
+        <div class="modal-header">
+          <h2><i data-lucide="mic-2"></i> Voice Configuration</h2>
+          <button id="close-modal-btn" class="icon-btn"><i data-lucide="x"></i></button>
+        </div>
+        <div class="modal-body">
+          <div class="voice-list-container">
+            <h3>Available Voices</h3>
+            <div id="voice-list" class="voice-list">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+          <div class="voice-details-container">
+            <h3>Selected Voice Details</h3>
+            <div id="voice-details" class="voice-details">
+              <p>Select a voice to view details.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

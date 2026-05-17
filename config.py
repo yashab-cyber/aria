@@ -1,0 +1,31 @@
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field
+from typing import Optional
+
+class Settings(BaseSettings):
+    # LLM Settings
+    aria_model: str = Field(default="gpt-4o")
+    openai_api_key: Optional[str] = None
+    deepseek_api_key: Optional[str] = None
+    anthropic_api_key: Optional[str] = None
+    gemini_api_key: Optional[str] = None
+    openrouter_api_key: Optional[str] = None
+    api_base: Optional[str] = None
+
+    # Server Settings
+    aria_host: str = Field(default="0.0.0.0")
+    aria_port: int = Field(default=8000)
+
+    # Memory Settings
+    chroma_persist_dir: str = Field(default="./memory/chroma_db")
+
+    # Email Settings (Optional)
+    email_host: Optional[str] = None
+    email_port: Optional[int] = None
+    email_user: Optional[str] = None
+    email_pass: Optional[str] = None
+
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+# Global config instance
+config = Settings()
