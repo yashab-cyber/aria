@@ -25,10 +25,11 @@ class AriaOrchestrator:
         
         # 4. Proactive Vision
         visual_context = ""
-        if intent_res.intent in ["BROWSER", "SYSTEM_CONTROL"]:
+        if intent_res.intent in ["BROWSER", "SYSTEM_CONTROL", "VISION"]:
             yield "Analyzing screen context...\n"
             try:
-                screen_analysis = await vision_agent.analyze_screen()
+                vision_prompt = user_input if intent_res.intent == "VISION" else "Describe what is currently visible on the screen."
+                screen_analysis = await vision_agent.analyze_screen(prompt=vision_prompt)
                 visual_context = f"Current Screen Context:\n{screen_analysis}\n"
                 yield "Screen analyzed.\n\n"
             except Exception as e:
