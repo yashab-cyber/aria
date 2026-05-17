@@ -18,3 +18,11 @@ See [docs/getting_started.md](docs/getting_started.md) for installation and usag
 
 - [Architecture Overview](docs/architecture.md)
 - [Modules & Capabilities](docs/architecture.md#capabilities-modules)
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+This project is licensed under the MIT License.
