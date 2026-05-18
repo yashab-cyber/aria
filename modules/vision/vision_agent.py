@@ -492,6 +492,295 @@ Rules:
         except Exception as e:
             return f"Error extracting structured data: {e}"
 
+    # ──────────────────────────────────────────────────
+    #  Tool 13 — Smart Click (Vision-Guided)
+    # ──────────────────────────────────────────────────
+
+    @aria_tool(
+        name="smart_click",
+        description="Vision-guided click: describe a UI element in natural language (e.g. 'the Submit button', 'the search bar') and ARIA will find it on screen and click it automatically.",
+    )
+    async def smart_click(self, element_description: str, button: str = "left") -> str:
+        try:
+            import json as _json
+            screenshot = self._capture_screen()
+            w, h = screenshot.size
+            img_b64 = self._pil_to_base64(screenshot)
+
+            result = await self._ask_vision(
+                f"""You are a precise UI element locator. Find the element described below on the screenshot.
+
+Element to find: "{element_description}"
+
+The screenshot dimensions are {w}x{h} pixels.
+
+Respond ONLY in this exact JSON format:
+{{"found": true, "x": <center_x>, "y": <center_y>, "confidence": <0.0-1.0>, "description": "<what you found>"}}
+
+If the element is not visible, respond:
+{{"found": false, "confidence": 0.0, "description": "Element not found."}}""",
+                [img_b64],
+                max_tokens=200,
+            )
+
+            # Parse the coordinates
+            try:
+                data = _json.loads(result)
+            except _json.JSONDecodeError:
+                # Try to extract JSON from mixed text
+                start = result.find("{")
+                end = result.rfind("}") + 1
+                if start >= 0 and end > start:
+                    data = _json.loads(result[start:end])
+                else:
+                    return f"Could not parse vision response: {result}"
+
+            if not data.get("found", False):
+                return f"Element not found on screen: '{element_description}'"
+
+            x, y = int(data["x"]), int(data["y"])
+            confidence = data.get("confidence", 0)
+            desc = data.get("description", "")
+
+            if confidence < 0.3:
+                return f"Low confidence ({confidence:.0%}) finding '{element_description}'. Not clicking. Found: {desc}"
+
+            # Execute the click
+            import pyautogui
+            pyautogui.click(x=x, y=y, button=button)
+            return f"Smart-clicked '{element_description}' at ({x}, {y}) — {desc} (confidence: {confidence:.0%})"
+
+        except Exception as e:
+            return f"Smart click failed: {e}"
+
+    # ──────────────────────────────────────────────────
+    #  Tool 14 — Smart Type (Vision-Guided)
+    # ──────────────────────────────────────────────────
+
+    @aria_tool(
+        name="smart_type",
+        description="Vision-guided typing: describe an input field (e.g. 'the email field', 'search box') and ARIA will find it, click it, and type the given text.",
+    )
+    async def smart_type(self, field_description: str, text: str) -> str:
+        try:
+            import json as _json
+            screenshot = self._capture_screen()
+            w, h = screenshot.size
+            img_b64 = self._pil_to_base64(screenshot)
+
+            result = await self._ask_vision(
+                f"""You are a precise UI element locator. Find the INPUT FIELD described below.
+
+Field to find: "{field_description}"
+
+The screenshot dimensions are {w}x{h} pixels.
+
+Respond ONLY in this exact JSON format:
+{{"found": true, "x": <center_x>, "y": <center_y>, "confidence": <0.0-1.0>, "description": "<what you found>"}}
+
+If not found: {{"found": false, "confidence": 0.0, "description": "Field not found."}}""",
+                [img_b64],
+                max_tokens=200,
+            )
+
+            try:
+                data = _json.loads(result)
+            except _json.JSONDecodeError:
+                start = result.find("{")
+                end = result.rfind("}") + 1
+                if start >= 0 and end > start:
+                    data = _json.loads(result[start:end])
+                else:
+                    return f"Could not parse vision response: {result}"
+
+            if not data.get("found", False):
+                return f"Field not found: '{field_description}'"
+
+            x, y = int(data["x"]), int(data["y"])
+            confidence = data.get("confidence", 0)
+
+            if confidence < 0.3:
+                return f"Low confidence ({confidence:.0%}) finding '{field_description}'. Not typing."
+
+            import pyautogui
+            # Click the field first, then type
+            pyautogui.click(x=x, y=y)
+            await asyncio.sleep(0.2)
+            # Select all existing text and replace
+            pyautogui.hotkey('ctrl', 'a')
+            await asyncio.sleep(0.1)
+            pyautogui.write(text, interval=0.03)
+            return f"Smart-typed into '{field_description}' at ({x},{y}): {text[:80]}"
+
+        except Exception as e:
+            return f"Smart type failed: {e}"
+
+    # ──────────────────────────────────────────────────
+    #  Tool 15 — Read Document (PDF/DOCX/PPTX)
+    # ──────────────────────────────────────────────────
+
+    @aria_tool(
+        name="read_document",
+        description="Reads a document file (PDF, DOCX, PPTX, or image) and uses Vision AI to analyze its contents. For PDFs, renders each page as an image.",
+    )
+    async def read_document(
+        self, file_path: str, prompt: str = "Read and summarize this document.", max_pages: int = 5
+    ) -> str:
+        try:
+            if not os.path.exists(file_path):
+                return f"File not found: {file_path}"
+
+            ext = os.path.splitext(file_path)[1].lower()
+            images_b64 = []
+
+            if ext == ".pdf":
+                try:
+                    import fitz  # PyMuPDF
+                    doc = fitz.open(file_path)
+                    for i, page in enumerate(doc):
+                        if i >= max_pages:
+                            break
+                        pix = page.get_pixmap(dpi=200)
+                        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                        images_b64.append(self._pil_to_base64(img, max_dim=2048))
+                    doc.close()
+                except ImportError:
+                    return "PyMuPDF not installed. Run: pip install pymupdf"
+
+            elif ext in (".docx", ".pptx"):
+                try:
+                    # Convert to PDF first using LibreOffice, then render
+                    import tempfile
+                    import subprocess
+                    with tempfile.TemporaryDirectory() as tmpdir:
+                        subprocess.run(
+                            ["libreoffice", "--headless", "--convert-to", "pdf", "--outdir", tmpdir, file_path],
+                            capture_output=True, timeout=30
+                        )
+                        pdf_name = os.path.splitext(os.path.basename(file_path))[0] + ".pdf"
+                        pdf_path = os.path.join(tmpdir, pdf_name)
+                        if os.path.exists(pdf_path):
+                            import fitz
+                            doc = fitz.open(pdf_path)
+                            for i, page in enumerate(doc):
+                                if i >= max_pages:
+                                    break
+                                pix = page.get_pixmap(dpi=200)
+                                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                                images_b64.append(self._pil_to_base64(img, max_dim=2048))
+                            doc.close()
+                        else:
+                            return f"LibreOffice conversion failed for {file_path}"
+                except ImportError:
+                    return "PyMuPDF not installed. Run: pip install pymupdf"
+                except FileNotFoundError:
+                    return "LibreOffice not found. Install: sudo apt install libreoffice"
+
+            elif ext in (".png", ".jpg", ".jpeg", ".bmp", ".webp", ".tiff"):
+                img = Image.open(file_path).convert("RGB")
+                images_b64.append(self._pil_to_base64(img, max_dim=2048))
+
+            else:
+                # Try reading as text
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content = f.read(10000)
+                    return f"Text file contents:\n{content}"
+                except Exception:
+                    return f"Unsupported file type: {ext}"
+
+            if not images_b64:
+                return "No pages could be rendered from the document."
+
+            augmented_prompt = f"""{prompt}
+
+This document has {len(images_b64)} page(s). Analyze all pages shown."""
+
+            return await self._ask_vision(augmented_prompt, images_b64, max_tokens=2000, detail="high")
+
+        except Exception as e:
+            return f"Document reading failed: {e}"
+
+    # ──────────────────────────────────────────────────
+    #  Tool 16 — Annotated Screenshot
+    # ──────────────────────────────────────────────────
+
+    @aria_tool(
+        name="annotated_screenshot",
+        description="Takes a screenshot and labels all interactive UI elements (buttons, links, inputs) with numbered markers. Returns the annotated image path and element list.",
+    )
+    async def annotated_screenshot(self, filepath: str = "") -> str:
+        try:
+            if not filepath:
+                filepath = os.path.expanduser("~/annotated_screen.png")
+
+            screenshot = self._capture_screen()
+            img_b64 = self._pil_to_base64(screenshot)
+
+            # Ask vision to enumerate all interactive elements
+            result = await self._ask_vision(
+                """You are a UI element detector. List ALL interactive elements visible on this screenshot.
+
+For each element, provide:
+- A sequential number (1, 2, 3...)
+- The element type (button, link, input, dropdown, checkbox, tab, icon, menu item)
+- A brief label/description
+- Approximate pixel coordinates (center_x, center_y)
+
+Respond ONLY as a JSON array:
+[{"id": 1, "type": "button", "label": "Submit", "x": 500, "y": 300}, ...]
+
+Be thorough — find EVERY clickable or interactive element.""",
+                [img_b64],
+                max_tokens=2000,
+                detail="high",
+            )
+
+            # Parse the element list
+            import json as _json
+            try:
+                # Handle potential markdown wrapping
+                clean = result.strip()
+                if clean.startswith("```"):
+                    clean = clean.split("\n", 1)[1].rsplit("```", 1)[0]
+                elements = _json.loads(clean)
+            except _json.JSONDecodeError:
+                start = result.find("[")
+                end = result.rfind("]") + 1
+                if start >= 0 and end > start:
+                    elements = _json.loads(result[start:end])
+                else:
+                    return f"Vision found elements but could not parse coordinates. Raw: {result[:500]}"
+
+            # Draw numbered annotations on the screenshot
+            draw = ImageDraw.Draw(screenshot)
+            try:
+                font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 16)
+            except Exception:
+                font = ImageFont.load_default()
+
+            for elem in elements:
+                eid = elem.get("id", "?")
+                x = int(elem.get("x", 0))
+                y = int(elem.get("y", 0))
+                # Draw a red circle + number
+                r = 14
+                draw.ellipse([x-r, y-r, x+r, y+r], fill="red", outline="white", width=2)
+                draw.text((x-6, y-8), str(eid), fill="white", font=font)
+
+            os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)
+            screenshot.save(filepath)
+
+            # Build summary
+            lines = [f"Annotated screenshot saved to: {filepath}", f"Found {len(elements)} interactive elements:\n"]
+            for elem in elements:
+                lines.append(f"  [{elem.get('id')}] {elem.get('type', '?')}: {elem.get('label', '?')} @ ({elem.get('x')},{elem.get('y')})")
+
+            return "\n".join(lines)
+
+        except Exception as e:
+            return f"Annotated screenshot failed: {e}"
+
 
 # Singleton instance
 vision_agent = VisionAgent()

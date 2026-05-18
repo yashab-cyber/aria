@@ -18,7 +18,8 @@
     </div>
 
     <div id="app">
-      <header class="top-bar">
+      <!-- Sidebar / Left Navigation -->
+      <aside class="sidebar">
         <div class="brand">
           <div class="ai-core idle" id="ai-core">
             <div class="core-inner"></div>
@@ -27,63 +28,42 @@
           </div>
           <h1>A.R.I.A. <span class="status-indicator online"></span></h1>
         </div>
-        <div class="system-stats" id="sys-stats">
-          <span class="stat"><i data-lucide="activity"></i> CPU: <span id="cpu-val">--%</span></span>
-          <span class="stat"><i data-lucide="memory-stick"></i> RAM: <span id="ram-val">--%</span></span>
+
+        <nav class="nav-links">
+          <button class="nav-btn active" id="nav-chat"><i data-lucide="message-square"></i> Chat Interface</button>
+          <button class="nav-btn" id="nav-memory"><i data-lucide="database"></i> Memory Browser</button>
+          <button class="nav-btn" id="voice-config-btn"><i data-lucide="mic-2"></i> Voice Settings</button>
+        </nav>
+
+        <div class="sidebar-bottom">
+          <div class="system-stats" id="sys-stats">
+            <div class="stat"><i data-lucide="activity"></i> CPU: <span id="cpu-val">--%</span></div>
+            <div class="stat"><i data-lucide="memory-stick"></i> RAM: <span id="ram-val">--%</span></div>
+          </div>
         </div>
-      </header>
+      </aside>
       
-      <main class="dashboard">
-        <div class="panel chat-panel">
-          <div class="panel-header">
-            <h2><i data-lucide="message-square"></i> Communication Link</h2>
-          </div>
-          <div class="chat-history" id="chat-history">
-            <div class="message aria">
-              <div class="avatar"><i data-lucide="cpu"></i></div>
-              <div class="content">A.R.I.A. initialized. Awaiting input.</div>
+      <!-- Main Chat Area -->
+      <main class="chat-container">
+        <div class="chat-history" id="chat-history">
+          <div class="message aria">
+            <div class="avatar"><i data-lucide="cpu"></i></div>
+            <div class="content">
+              <p>A.R.I.A. initialized. Awaiting input.</p>
             </div>
-          </div>
-          <div class="chat-input-container">
-            <button id="mic-btn" title="Voice Input"><i data-lucide="mic"></i></button>
-            <input type="text" id="chat-input" placeholder="Enter command or query..." autocomplete="off">
-            <button id="send-btn"><i data-lucide="send"></i></button>
           </div>
         </div>
         
-        <div class="side-panels">
-          <div class="panel modules-panel">
-            <div class="panel-header">
-              <h2><i data-lucide="layers"></i> Active Modules</h2>
-            </div>
-            <ul class="module-list">
-              <li><i data-lucide="terminal"></i> System Control <span class="badge active">Active</span></li>
-              <li><i data-lucide="globe"></i> Browser Engine <span class="badge active">Active</span></li>
-              <li><i data-lucide="code"></i> Code Sandbox <span class="badge active">Active</span></li>
-              <li><i data-lucide="database"></i> Chroma Memory <span class="badge active">Active</span></li>
-              <li>
-                <i data-lucide="headphones"></i> Audio Mode
-                <select id="audio-mode-select" class="mode-select">
-                  <option value="browser_audio">Browser Audio</option>
-                  <option value="raspberrypi_audio">Local Hardware</option>
-                </select>
-              </li>
-              <li>
-                <button id="voice-config-btn" class="voice-btn">
-                  <i data-lucide="mic-2"></i> Voice Configuration
-                </button>
-              </li>
-            </ul>
+        <div class="chat-input-wrapper">
+          <div class="chat-input-container">
+            <button id="mic-btn" title="Voice Input" class="mic-btn">
+              <i data-lucide="mic"></i>
+              <div class="mic-waves"></div>
+            </button>
+            <textarea id="chat-input" placeholder="Message A.R.I.A..." rows="1" autocomplete="off"></textarea>
+            <button id="send-btn" title="Send"><i data-lucide="arrow-up"></i></button>
           </div>
-          
-          <div class="panel activity-panel">
-            <div class="panel-header">
-              <h2><i data-lucide="activity"></i> System Logs</h2>
-            </div>
-            <div class="log-container" id="log-container">
-              <div class="log-entry info">System initialized.</div>
-            </div>
-          </div>
+          <div class="input-footer">A.R.I.A. can execute code, automate your browser, and manage your system.</div>
         </div>
       </main>
     </div>
@@ -93,7 +73,7 @@
       <div class="modal-content voice-modal-box">
         <div class="modal-header">
           <h2><i data-lucide="mic-2"></i> Voice Configuration</h2>
-          <button id="close-modal-btn" class="icon-btn"><i data-lucide="x"></i></button>
+          <button class="icon-btn close-modal-btn"><i data-lucide="x"></i></button>
         </div>
         <div class="modal-body">
           <div class="voice-list-container">
@@ -107,6 +87,25 @@
             <div id="voice-details" class="voice-details">
               <p>Select a voice to view details.</p>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Memory Browser Modal -->
+    <div id="memory-modal" class="modal-overlay hidden">
+      <div class="modal-content memory-modal-box">
+        <div class="modal-header">
+          <h2><i data-lucide="database"></i> Episodic Memory Browser</h2>
+          <button class="icon-btn close-modal-btn"><i data-lucide="x"></i></button>
+        </div>
+        <div class="memory-search-bar">
+          <i data-lucide="search"></i>
+          <input type="text" id="memory-search-input" placeholder="Search past conversations...">
+        </div>
+        <div class="modal-body memory-body">
+          <div id="memory-list" class="memory-list">
+            <!-- Dynamically populated -->
           </div>
         </div>
       </div>

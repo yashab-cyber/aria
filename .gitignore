@@ -92,6 +92,11 @@ memory/procedural.db
 memory/procedural.db-journal
 memory/procedural.db-wal
 
+# Data directory databases (e.g. scheduler)
+data/*.db
+data/*.db-journal
+data/*.db-wal
+
 # ── Logs ──────────────────────────────────────────────────
 logs/
 *.log

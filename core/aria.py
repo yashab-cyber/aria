@@ -11,7 +11,7 @@ class AriaOrchestrator:
         # Start initial memory session
         memory_manager.start_session()
         
-    async def process(self, user_input: str) -> AsyncGenerator[str, None]:
+    async def process(self, user_input: str, send_event=None) -> AsyncGenerator[str, None]:
         """Main entry point for processing user input."""
         
         # 1. Recall context from all three memory tiers
@@ -59,7 +59,7 @@ class AriaOrchestrator:
             
             # Phase 2: Execution with result reflection
             results, exec_reflections = await planner.execute_plan_with_reflection(
-                executed_plan, user_input
+                executed_plan, user_input, send_event
             )
             
             # Report execution reflection to user

@@ -53,7 +53,7 @@ Create a logical step-by-step plan. Ensure dependencies are correct.
         args = response.choices[0].message.function_call.arguments
         return Plan(**json.loads(args))
 
-    async def execute_plan(self, plan: Plan):
+    async def execute_plan(self, plan: Plan, send_event=None):
         """Executes a plan step by step, respecting dependencies."""
         results = {}
         
@@ -72,12 +72,21 @@ Create a logical step-by-step plan. Ensure dependencies are correct.
                         # Very simple templating for passing results between steps
                         pass
                         
+                if send_event:
+                    await send_event({"type": "tool_start", "tool": step.tool_name, "args": args})
+                    
                 res = await registry.execute_tool(step.tool_name, **args)
                 results[step.step_id] = res
+                
+                if send_event:
+                    await send_event({"type": "tool_end", "tool": step.tool_name, "result": str(res)[:500]})
+                    
                 console.print(f"[green]Step {step.step_id} Complete[/green]")
             except Exception as e:
                 console.print(f"[red]Step {step.step_id} Failed: {str(e)}[/red]")
                 results[step.step_id] = f"Error: {str(e)}"
+                if send_event:
+                    await send_event({"type": "tool_end", "tool": step.tool_name, "result": f"Error: {str(e)}"})
                 break # Stop on failure for now
                 
         return results
@@ -124,7 +133,7 @@ Create a logical step-by-step plan. Ensure dependencies are correct.
         return plan, reflections
 
     async def execute_plan_with_reflection(
-        self, plan: Plan, objective: str
+        self, plan: Plan, objective: str, send_event=None
     ) -> Tuple[dict, list]:
         """
         Execute a plan with post-execution reflection and retry.
@@ -142,7 +151,7 @@ Create a logical step-by-step plan. Ensure dependencies are correct.
         for attempt in range(1, max_retries + 1):
             console.print(f"\n[bold cyan]⚡ Execution Attempt {attempt}/{max_retries}[/bold cyan]")
 
-            results = await self.execute_plan(current_plan)
+            results = await self.execute_plan(current_plan, send_event)
 
             # Reflect on results
             verdict = await reflection_engine.reflect_on_results(

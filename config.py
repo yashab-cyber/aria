@@ -28,11 +28,24 @@ class Settings(BaseSettings):
     reflection_plan_threshold: float = Field(default=0.7)
     reflection_result_threshold: float = Field(default=0.6)
 
+    # Scheduler Settings
+    scheduler_db_path: str = Field(default="./data/scheduler.db")
+
     # Email Settings (Optional)
     email_host: Optional[str] = None
     email_port: Optional[int] = None
     email_user: Optional[str] = None
     email_pass: Optional[str] = None
+
+    # Notification Settings (Optional)
+    slack_webhook_url: Optional[str] = None
+    telegram_bot_token: Optional[str] = None
+    telegram_chat_id: Optional[str] = None
+    twilio_account_sid: Optional[str] = None
+    twilio_auth_token: Optional[str] = None
+    twilio_whatsapp_from: Optional[str] = None
+    twilio_whatsapp_to: Optional[str] = None
+    discord_webhook_url: Optional[str] = None
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

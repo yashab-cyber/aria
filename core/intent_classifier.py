@@ -7,7 +7,7 @@ import litellm
 from litellm import acompletion
 
 class IntentResult(BaseModel):
-    intent: str = Field(description="One of: CHAT, SYSTEM_CONTROL, BROWSER, CODE, RESEARCH, EMAIL, MEMORY_QUERY, VISION, MULTI_STEP")
+    intent: str = Field(description="One of: CHAT, SYSTEM_CONTROL, BROWSER, CODE, RESEARCH, EMAIL, MEMORY_QUERY, VISION, SCHEDULE, NOTIFICATION, MULTI_STEP")
     confidence: float = Field(default=1.0, description="Confidence score between 0.0 and 1.0")
     entities: dict = Field(default_factory=dict, description="Extracted entities from the user prompt")
     requires_tools: bool = Field(default=False, description="Whether this intent likely requires calling external tools")
@@ -25,6 +25,8 @@ Available categories:
 - EMAIL: Reading or sending emails.
 - MEMORY_QUERY: Asking A.R.I.A about past conversations or stored facts.
 - VISION: Analyzing the screen, reading text from screen, finding UI elements, analyzing images, comparing screenshots, monitoring screen changes, UI/UX analysis.
+- SCHEDULE: Setting reminders, scheduling tasks, cron jobs, recurring automation, "remind me", "every Monday", "run nightly".
+- NOTIFICATION: Sending alerts or messages to Slack, Telegram, WhatsApp, Email, or Discord.
 - MULTI_STEP: A complex request requiring multiple different modules to work together.
 
 User input: "{user_input}"

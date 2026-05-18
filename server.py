@@ -9,6 +9,8 @@ import modules.system.shell
 import modules.system.file_manager
 import modules.coding.sandbox
 import modules.system.input_control
+import modules.scheduler
+import modules.notifications
 import json
 import asyncio
 
@@ -32,6 +34,32 @@ async def get_status():
 async def get_memory_status():
     """Returns the status of all three memory tiers."""
     return memory_manager.get_memory_status()
+
+# ── Memory Browser Endpoints ──
+
+@app.get("/api/memory/search")
+async def search_memory(q: str = "", limit: int = 10):
+    from memory.memory_manager import memory_manager
+    # Use Episodic memory recall
+    if not q:
+        # Just return recent summaries if no query
+        items = memory_manager.episodic.get_session_summaries(n=limit)
+        return {"results": items}
+        
+    items = memory_manager.episodic.recall_similar(q, n_results=limit)
+    return {"results": items}
+
+@app.delete("/api/memory/sessions/{session_id}")
+async def delete_memory_session(session_id: str):
+    try:
+        from memory.memory_manager import memory_manager
+        # Delete summary and all messages for this session
+        memory_manager.episodic.store.delete_from_collection(
+            "conversations", where={"session_id": session_id}
+        )
+        return {"status": "success"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 from pydantic import BaseModel
 class ModeRequest(BaseModel):
@@ -87,6 +115,18 @@ async def preview_voice(voice_id: str):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+# Scheduler REST endpoints
+@app.get("/api/scheduler/jobs")
+async def get_scheduled_jobs():
+    from modules.scheduler.scheduler_engine import scheduler
+    return {"jobs": scheduler.get_jobs_for_api()}
+
+@app.delete("/api/scheduler/jobs/{job_id}")
+async def delete_scheduled_job(job_id: str):
+    from modules.scheduler.scheduler_engine import scheduler
+    result = await scheduler.cancel_scheduled_task(job_id)
+    return {"result": result}
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """Bidirectional streaming WebSocket for chat and commands."""
@@ -108,7 +148,10 @@ async def websocket_endpoint(websocket: WebSocket):
                 continue
                 
             # Process via orchestrator and stream back
-            async for chunk in orchestrator.process(user_input):
+            async def send_event(evt):
+                await websocket.send_json(evt)
+
+            async for chunk in orchestrator.process(user_input, send_event=send_event):
                 await websocket.send_json({"type": "chunk", "content": chunk})
                 
             await websocket.send_json({"type": "done"})
@@ -163,8 +206,11 @@ async def audio_websocket_endpoint(websocket: WebSocket):
                 # Let's stream it back via the main socket architecture by 
                 # creating a background task that uses the audio websocket to send the text chunks.
                 
+                async def send_event(evt):
+                    await websocket.send_json(evt)
+
                 async def process_and_respond():
-                    async for chunk in orchestrator.process(text):
+                    async for chunk in orchestrator.process(text, send_event=send_event):
                         await websocket.send_json({"type": "chunk", "content": chunk})
                     await websocket.send_json({"type": "done"})
                 
@@ -176,9 +222,18 @@ async def audio_websocket_endpoint(websocket: WebSocket):
 
 
 
+# Start scheduler on server startup
+@app.on_event("startup")
+async def startup_event():
+    from modules.scheduler.scheduler_engine import scheduler
+    await scheduler.start()
+
 # Ensure playwright closes gracefully and memory is flushed
 @app.on_event("shutdown")
 async def shutdown_event():
+    # Shut down the scheduler
+    from modules.scheduler.scheduler_engine import scheduler
+    await scheduler.shutdown()
     # Flush any active memory session
     await memory_manager.end_session()
     # Consolidate old memories on shutdown
