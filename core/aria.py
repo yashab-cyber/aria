@@ -2,23 +2,23 @@ from typing import AsyncGenerator
 from core.llm_engine import llm
 from core.intent_classifier import classifier
 from core.planner import planner
-from memory.conversation_memory import conv_memory
+from memory.memory_manager import memory_manager
 from modules.vision.vision_agent import vision_agent
 from modules.voice.voice_agent import voice_agent
 
 class AriaOrchestrator:
     def __init__(self):
-        pass
+        # Start initial memory session
+        memory_manager.start_session()
         
     async def process(self, user_input: str) -> AsyncGenerator[str, None]:
         """Main entry point for processing user input."""
         
-        # 1. Recall past memory
-        past_context = conv_memory.recall_past(user_input, n=2)
-        context_msg = "Past Memory Context:\n" + "\n".join(past_context) if past_context else ""
+        # 1. Recall context from all three memory tiers
+        context_msg = memory_manager.get_context(user_input)
         
-        # 2. Add to short-term history
-        conv_memory.add_message("user", user_input)
+        # 2. Add to working memory
+        memory_manager.add_message("user", user_input)
         
         # 3. Classify intent
         intent_res = await classifier.classify(user_input)
@@ -37,15 +37,37 @@ class AriaOrchestrator:
 
         # 5. Multi-Step Execution
         plan_results = ""
+        executed_plan = None
         if intent_res.intent == "MULTI_STEP":
+            # Check procedural memory for a matching learned workflow
+            matching_workflows = memory_manager.procedural.find_matching_workflow(user_input, n_results=1)
+            if matching_workflows and matching_workflows[0].get("success_rate", 0) > 0.7:
+                wf = matching_workflows[0]
+                yield f"Found learned workflow: \"{wf['name']}\" (success rate: {wf['success_rate']:.0%}). Executing...\n\n"
+            
             yield "Analyzing complex request... generating plan.\n\n"
-            plan = await planner.create_plan(user_input)
-            yield f"Plan generated with {len(plan.steps)} steps. Executing...\n\n"
+            executed_plan = await planner.create_plan(user_input)
+            yield f"Plan generated with {len(executed_plan.steps)} steps. Executing...\n\n"
             
             # Execute plan
-            results = await planner.execute_plan(plan)
+            results = await planner.execute_plan(executed_plan)
             plan_results = f"\nPlan Execution Results:\n{results}\n"
             yield "Plan execution complete. Formulating final response...\n\n"
+            
+            # Record tool calls from plan in working memory
+            for step in executed_plan.steps:
+                step_result = results.get(step.step_id, "")
+                memory_manager.record_tool_call(
+                    tool_name=step.tool_name,
+                    args=step.tool_args,
+                    result=str(step_result),
+                )
+            
+            # Auto-commit: check if this plan should become a learned workflow
+            await memory_manager.auto_commit(
+                plan_results=results,
+                plan_steps=executed_plan.steps,
+            )
         
         # Prepare context
         augmented_input = user_input
@@ -80,8 +102,8 @@ ABSOLUTE RULES FOR EVERY RESPONSE:
         
         augmented_input = f"{voice_prompt}\n\nUser Request: {augmented_input}"
         
-        # Get history (excluding current user msg which we just added)
-        history = conv_memory.get_recent_context()[:-1] 
+        # Get history from working memory
+        history = memory_manager.get_recent_context()[:-1]
         history.append({"role": "user", "content": augmented_input})
             
         # 6. Stream response
@@ -90,8 +112,8 @@ ABSOLUTE RULES FOR EVERY RESPONSE:
             full_response += chunk
             yield chunk
             
-        # 7. Save assistant response to history
-        conv_memory.add_message("assistant", full_response)
+        # 7. Save assistant response to working memory
+        memory_manager.add_message("assistant", full_response)
         
         # 8. Fire voice synthesis in background — don't block the response
         async def _speak_background(text):

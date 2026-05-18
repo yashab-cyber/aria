@@ -18,6 +18,9 @@ class Settings(BaseSettings):
 
     # Memory Settings
     chroma_persist_dir: str = Field(default="./memory/chroma_db")
+    sqlite_db_path: str = Field(default="./memory/procedural.db")
+    memory_summarize_after_days: int = Field(default=7)
+    memory_max_working_messages: int = Field(default=50)
 
     # Email Settings (Optional)
     email_host: Optional[str] = None

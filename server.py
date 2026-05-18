@@ -2,6 +2,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from core.aria import orchestrator
 from modules.system.system_info import sys_monitor
+from memory.memory_manager import memory_manager
 import modules.vision
 import modules.voice
 import modules.system.shell
@@ -26,6 +27,11 @@ async def get_status():
     """Returns current system status for the dashboard."""
     status = await sys_monitor.get_system_status()
     return status
+
+@app.get("/api/memory/status")
+async def get_memory_status():
+    """Returns the status of all three memory tiers."""
+    return memory_manager.get_memory_status()
 
 from pydantic import BaseModel
 class ModeRequest(BaseModel):
@@ -85,6 +91,8 @@ async def preview_voice(voice_id: str):
 async def websocket_endpoint(websocket: WebSocket):
     """Bidirectional streaming WebSocket for chat and commands."""
     await websocket.accept()
+    # Start a new memory session for this connection
+    memory_manager.start_session()
     try:
         while True:
             data = await websocket.receive_text()
@@ -106,7 +114,9 @@ async def websocket_endpoint(websocket: WebSocket):
             await websocket.send_json({"type": "done"})
             
     except WebSocketDisconnect:
-        print("Client disconnected")
+        # Flush working memory → episodic on disconnect
+        await memory_manager.end_session()
+        print("Client disconnected — session committed to episodic memory")
 
 # Audio WebSocket functionality
 active_audio_sockets = []
@@ -166,8 +176,12 @@ async def audio_websocket_endpoint(websocket: WebSocket):
 
 
 
-# Ensure playwright closes gracefully
+# Ensure playwright closes gracefully and memory is flushed
 @app.on_event("shutdown")
 async def shutdown_event():
+    # Flush any active memory session
+    await memory_manager.end_session()
+    # Consolidate old memories on shutdown
+    await memory_manager.consolidate_old_memories()
     from modules.browser.browser_agent import browser_agent
     await browser_agent.shutdown()
