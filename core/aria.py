@@ -35,7 +35,7 @@ class AriaOrchestrator:
             except Exception as e:
                 yield f"Vision analysis failed: {str(e)}\n\n"
 
-        # 5. Multi-Step Execution
+        # 5. Multi-Step Execution with Self-Reflection Loop
         plan_results = ""
         executed_plan = None
         if intent_res.intent == "MULTI_STEP":
@@ -45,12 +45,28 @@ class AriaOrchestrator:
                 wf = matching_workflows[0]
                 yield f"Found learned workflow: \"{wf['name']}\" (success rate: {wf['success_rate']:.0%}). Executing...\n\n"
             
-            yield "Analyzing complex request... generating plan.\n\n"
-            executed_plan = await planner.create_plan(user_input)
-            yield f"Plan generated with {len(executed_plan.steps)} steps. Executing...\n\n"
+            yield "Analyzing complex request... generating plan with self-reflection.\n\n"
             
-            # Execute plan
-            results = await planner.execute_plan(executed_plan)
+            # Phase 1: Plan generation with reflection loop
+            executed_plan, plan_reflections = await planner.create_plan_with_reflection(user_input)
+            
+            # Report reflection results to user
+            num_revisions = len(plan_reflections)
+            final_score = plan_reflections[-1].score if plan_reflections else 0
+            if num_revisions > 1:
+                yield f"🔍 Plan refined through {num_revisions} reflection iterations (final score: {final_score:.2f}).\n\n"
+            yield f"✅ Plan approved with {len(executed_plan.steps)} steps. Executing...\n\n"
+            
+            # Phase 2: Execution with result reflection
+            results, exec_reflections = await planner.execute_plan_with_reflection(
+                executed_plan, user_input
+            )
+            
+            # Report execution reflection to user
+            exec_attempts = len(exec_reflections)
+            if exec_attempts > 1:
+                yield f"🔄 Execution required {exec_attempts} attempts to satisfy objective.\n\n"
+            
             plan_results = f"\nPlan Execution Results:\n{results}\n"
             yield "Plan execution complete. Formulating final response...\n\n"
             

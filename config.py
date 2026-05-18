@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     memory_summarize_after_days: int = Field(default=7)
     memory_max_working_messages: int = Field(default=50)
 
+    # Reflection / Agentic Loop Settings
+    reflection_max_plan_revisions: int = Field(default=3)
+    reflection_max_execution_retries: int = Field(default=2)
+    reflection_plan_threshold: float = Field(default=0.7)
+    reflection_result_threshold: float = Field(default=0.6)
+
     # Email Settings (Optional)
     email_host: Optional[str] = None
     email_port: Optional[int] = None
