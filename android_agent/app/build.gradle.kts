@@ -58,7 +58,7 @@ android {
     }
 
     signingConfigs {
-        create("debug") {
+        getByName("debug") {
             storeFile = file("aria-debug.keystore")
             storePassword = "android"
             keyAlias = "aria"
