@@ -192,12 +192,25 @@ async def websocket_endpoint(websocket: WebSocket):
             try:
                 async for chunk in orchestrator.process(user_input, send_event=send_event):
                     await websocket.send_json({"type": "chunk", "content": chunk})
+            except WebSocketDisconnect:
+                raise
+            except RuntimeError as e:
+                if 'close' in str(e).lower():
+                    raise WebSocketDisconnect(code=1000)
+                print(f"Orchestrator error: {e}")
+                traceback.print_exc()
             except Exception as e:
                 print(f"Orchestrator error: {e}")
                 traceback.print_exc()
-                await websocket.send_json({"type": "chunk", "content": f"\n\n**System Error:** `{str(e)}`"})
+                try:
+                    await websocket.send_json({"type": "chunk", "content": f"\n\n**System Error:** `{str(e)}`"})
+                except Exception:
+                    pass
             finally:
-                await websocket.send_json({"type": "done"})
+                try:
+                    await websocket.send_json({"type": "done"})
+                except Exception:
+                    pass
             
     except WebSocketDisconnect:
         # Flush working memory → episodic on disconnect
@@ -249,12 +262,26 @@ async def audio_websocket_endpoint(websocket: WebSocket):
                     try:
                         async for chunk in orchestrator.process(text, send_event=send_event):
                             await websocket.send_json({"type": "chunk", "content": chunk})
+                    except WebSocketDisconnect:
+                        pass
+                    except RuntimeError as e:
+                        if 'close' in str(e).lower():
+                            pass
+                        else:
+                            print(f"Orchestrator audio error: {e}")
+                            traceback.print_exc()
                     except Exception as e:
                         print(f"Orchestrator audio error: {e}")
                         traceback.print_exc()
-                        await websocket.send_json({"type": "chunk", "content": f"\n\n**System Error:** `{str(e)}`"})
+                        try:
+                            await websocket.send_json({"type": "chunk", "content": f"\n\n**System Error:** `{str(e)}`"})
+                        except Exception:
+                            pass
                     finally:
-                        await websocket.send_json({"type": "done"})
+                        try:
+                            await websocket.send_json({"type": "done"})
+                        except Exception:
+                            pass
                 
                 asyncio.create_task(process_and_respond())
 
