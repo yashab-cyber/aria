@@ -2,8 +2,11 @@ package com.aria.agent
 
 import android.accessibilityservice.AccessibilityService
 import android.app.NotificationManager
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.os.Build
 import android.view.accessibility.AccessibilityEvent
 import kotlinx.coroutines.*
 import org.json.JSONObject
@@ -15,6 +18,18 @@ class AriaAccessibilityService : AccessibilityService() {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     var currentPackage: String = ""
     var currentActivity: String = ""
+
+    private val reconnectReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == "com.aria.agent.RECONNECT") {
+                scope.launch {
+                    wsClient.disconnect()
+                    delay(500)
+                    wsClient.connect()
+                }
+            }
+        }
+    }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -33,6 +48,13 @@ class AriaAccessibilityService : AccessibilityService() {
             }
         )
         scope.launch { wsClient.connect() }
+        
+        val filter = IntentFilter("com.aria.agent.RECONNECT")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(reconnectReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(reconnectReceiver, filter)
+        }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -45,6 +67,11 @@ class AriaAccessibilityService : AccessibilityService() {
     override fun onInterrupt() {}
 
     override fun onDestroy() {
+        try {
+            unregisterReceiver(reconnectReceiver)
+        } catch (e: Exception) {
+            // Ignore if not registered
+        }
         wsClient.disconnect()
         scope.cancel()
         super.onDestroy()
