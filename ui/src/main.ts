@@ -262,11 +262,214 @@ document.querySelectorAll('.close-modal-btn').forEach(btn => {
   });
 });
 
-// Voice Modal
-document.getElementById('voice-config-btn')?.addEventListener('click', async () => {
-  document.getElementById('voice-modal')?.classList.remove('hidden');
-  // voice loading logic omitted for brevity (reused from before)
+// Settings Modal Logic
+const settingsModal = document.getElementById('settings-modal')!;
+const settingsForm = document.getElementById('settings-form') as HTMLFormElement;
+const settingsStatus = document.getElementById('settings-status')!;
+
+document.getElementById('nav-settings')?.addEventListener('click', () => {
+  settingsModal.classList.remove('hidden');
+  loadSettings();
 });
+
+// Settings Tabs
+document.querySelectorAll('.settings-tab').forEach(tab => {
+  tab.addEventListener('click', (e) => {
+    // Remove active from all tabs and sections
+    document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.settings-section').forEach(s => s.classList.remove('active'));
+    
+    // Add active to clicked tab and corresponding section
+    const targetId = (e.target as HTMLElement).getAttribute('data-target');
+    (e.target as HTMLElement).classList.add('active');
+    document.getElementById(targetId!)?.classList.add('active');
+  });
+});
+
+// Password Toggle
+document.querySelectorAll('.eye-toggle').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    const btnEl = e.currentTarget as HTMLElement;
+    const input = btnEl.previousElementSibling as HTMLInputElement;
+    const icon = btnEl.querySelector('i')!;
+    
+    if (input.type === 'password') {
+      input.type = 'text';
+      icon.setAttribute('data-lucide', 'eye-off');
+    } else {
+      input.type = 'password';
+      icon.setAttribute('data-lucide', 'eye');
+    }
+    createIcons({ icons, nameAttr: 'data-lucide' });
+  });
+});
+
+// Load Settings from API
+async function loadSettings() {
+  try {
+    settingsStatus.textContent = "Loading...";
+    settingsStatus.className = "status-msg";
+    
+    const res = await fetch('/api/config');
+    const data = await res.json();
+    
+    if (data.config) {
+      for (const [key, value] of Object.entries(data.config)) {
+        const input = document.getElementById(`cfg-${key}`) as HTMLInputElement;
+        if (input && value !== null) {
+          input.value = String(value);
+        }
+      }
+    }
+    settingsStatus.textContent = "";
+  } catch (err) {
+    settingsStatus.textContent = "Failed to load settings.";
+    settingsStatus.className = "status-msg error";
+  }
+}
+
+// Save Settings to API
+document.getElementById('save-settings-btn')?.addEventListener('click', async () => {
+  try {
+    settingsStatus.textContent = "Saving...";
+    settingsStatus.className = "status-msg";
+    
+    const formData = new FormData(settingsForm);
+    const payload: Record<string, string> = {};
+    
+    formData.forEach((value, key) => {
+      // Only include fields that have a value
+      if (value.toString().trim() !== "") {
+        payload[key] = value.toString();
+      }
+    });
+    
+    const res = await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    
+    const data = await res.json();
+    if (data.status === 'success') {
+      settingsStatus.textContent = "Configuration saved successfully!";
+      settingsStatus.className = "status-msg success";
+      setTimeout(() => settingsModal.classList.add('hidden'), 1500);
+    } else {
+      settingsStatus.textContent = data.message || "Failed to save.";
+      settingsStatus.className = "status-msg error";
+    }
+  } catch (err) {
+    settingsStatus.textContent = "Network error.";
+    settingsStatus.className = "status-msg error";
+  }
+});
+
+// Voice Modal Logic
+const voiceModal = document.getElementById('voice-modal')!;
+const voiceListEl = document.getElementById('voice-list')!;
+const voiceDetailsEl = document.getElementById('voice-details')!;
+let activeVoiceId = '';
+let currentlyPlayingAudio: HTMLAudioElement | null = null;
+
+document.getElementById('voice-config-btn')?.addEventListener('click', () => {
+  voiceModal.classList.remove('hidden');
+  loadVoices();
+});
+
+async function loadVoices() {
+  voiceListEl.innerHTML = '<p style="padding:1rem; color:var(--text-dim);">Loading voices...</p>';
+  try {
+    const res = await fetch('/api/voices');
+    const data = await res.json();
+    activeVoiceId = data.active_id;
+    
+    voiceListEl.innerHTML = '';
+    data.voices.forEach((voice: any) => {
+      const btn = document.createElement('button');
+      btn.className = `voice-item ${voice.voice_id === activeVoiceId ? 'active' : ''}`;
+      btn.innerHTML = `<span><i data-lucide="user"></i> ${voice.name}</span>`;
+      
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.voice-item').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        showVoiceDetails(voice);
+      });
+      voiceListEl.appendChild(btn);
+    });
+    createIcons({ icons, nameAttr: 'data-lucide' });
+    
+    // Select active by default
+    const activeBtn = voiceListEl.querySelector('.voice-item.active') as HTMLElement;
+    if (activeBtn) activeBtn.click();
+  } catch (e) {
+    voiceListEl.innerHTML = '<p style="padding:1rem; color:var(--error-red);">Failed to load voices.</p>';
+  }
+}
+
+function showVoiceDetails(voice: any) {
+  voiceDetailsEl.innerHTML = `
+    <h4 style="margin-bottom:1rem; font-size:1.1rem;">${voice.name}</h4>
+    <p style="margin-bottom:0.5rem;"><strong>TTS Engine:</strong> ${voice.tts_engine}</p>
+    <p style="margin-bottom:1.5rem;"><strong>STT Language:</strong> ${voice.stt_language}</p>
+    
+    ${voice.voice_id === activeVoiceId 
+      ? '<span class="status-indicator online" style="display:inline-block; margin-bottom:1rem;"></span> <span style="color:var(--accent-cyan);">Currently Active</span>' 
+      : `<button class="primary-btn" id="activate-voice-btn" data-id="${voice.voice_id}" style="margin-bottom:1rem;">Set as Active Voice</button>`}
+    
+    <div style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top:1rem;">
+      <button class="nav-btn" id="preview-voice-btn" data-id="${voice.voice_id}" title="Preview Voice">
+        <i data-lucide="play-circle"></i> Preview Audio
+      </button>
+    </div>
+  `;
+  createIcons({ icons, nameAttr: 'data-lucide' });
+  
+  document.getElementById('activate-voice-btn')?.addEventListener('click', async (e) => {
+    const id = (e.currentTarget as HTMLElement).getAttribute('data-id');
+    try {
+      await fetch('/api/voices/active', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ voice_id: id })
+      });
+      loadVoices();
+    } catch(e) { console.error('Failed to activate voice'); }
+  });
+  
+  document.getElementById('preview-voice-btn')?.addEventListener('click', async (e) => {
+    const btnEl = e.currentTarget as HTMLElement;
+    const id = btnEl.getAttribute('data-id');
+    const iconEl = btnEl.querySelector('i')!;
+    
+    if (currentlyPlayingAudio) {
+      currentlyPlayingAudio.pause();
+      currentlyPlayingAudio = null;
+    }
+    
+    iconEl.setAttribute('data-lucide', 'loader');
+    createIcons({ icons, nameAttr: 'data-lucide' });
+    
+    try {
+      const res = await fetch(`/api/voices/preview/${id}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      currentlyPlayingAudio = new Audio(url);
+      currentlyPlayingAudio.play();
+      
+      iconEl.setAttribute('data-lucide', 'pause-circle');
+      createIcons({ icons, nameAttr: 'data-lucide' });
+      
+      currentlyPlayingAudio.onended = () => {
+        iconEl.setAttribute('data-lucide', 'play-circle');
+        createIcons({ icons, nameAttr: 'data-lucide' });
+      };
+    } catch(err) {
+      iconEl.setAttribute('data-lucide', 'play-circle');
+      createIcons({ icons, nameAttr: 'data-lucide' });
+    }
+  });
+}
 
 // Memory Browser
 const memModal = document.getElementById('memory-modal')!;

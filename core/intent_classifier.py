@@ -45,7 +45,16 @@ User input: "{user_input}"
             api_base=config.api_base
         )
         
-        args = response.choices[0].message.function_call.arguments
-        return IntentResult(**json.loads(args))
+        try:
+            message = response.choices[0].message
+            if hasattr(message, "function_call") and message.function_call:
+                args = message.function_call.arguments
+                return IntentResult(**json.loads(args))
+            else:
+                print("[IntentClassifier] No function call returned. Falling back to CHAT.")
+                return IntentResult(intent="CHAT", confidence=0.5, requires_tools=False)
+        except Exception as e:
+            print(f"[IntentClassifier] JSON parse error: {e}")
+            return IntentResult(intent="CHAT", confidence=0.5, requires_tools=False)
 
 classifier = IntentClassifier()

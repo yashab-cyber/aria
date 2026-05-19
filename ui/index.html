@@ -33,6 +33,7 @@
           <button class="nav-btn active" id="nav-chat"><i data-lucide="message-square"></i> Chat Interface</button>
           <button class="nav-btn" id="nav-memory"><i data-lucide="database"></i> Memory Browser</button>
           <button class="nav-btn" id="voice-config-btn"><i data-lucide="mic-2"></i> Voice Settings</button>
+          <button class="nav-btn" id="nav-settings"><i data-lucide="settings"></i> System Settings</button>
         </nav>
 
         <div class="sidebar-bottom">
@@ -107,6 +108,122 @@
           <div id="memory-list" class="memory-list">
             <!-- Dynamically populated -->
           </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- System Settings Modal -->
+    <div id="settings-modal" class="modal-overlay hidden">
+      <div class="modal-content settings-modal-box">
+        <div class="modal-header">
+          <h2><i data-lucide="settings"></i> Global Configuration</h2>
+          <button class="icon-btn close-modal-btn"><i data-lucide="x"></i></button>
+        </div>
+        
+        <div class="settings-layout">
+          <!-- Settings Sidebar -->
+          <div class="settings-sidebar">
+            <button class="settings-tab active" data-target="settings-llm">LLM Engine</button>
+            <button class="settings-tab" data-target="settings-notifications">Notifications</button>
+            <button class="settings-tab" data-target="settings-advanced">Advanced</button>
+          </div>
+          
+          <!-- Settings Content -->
+          <div class="settings-content">
+            <form id="settings-form">
+              <!-- LLM Engine Tab -->
+              <div class="settings-section active" id="settings-llm">
+                <h3>Core LLM Settings</h3>
+                <div class="form-group">
+                  <label for="cfg-aria_model">Model Name</label>
+                  <input type="text" id="cfg-aria_model" name="aria_model" placeholder="e.g. gpt-4o, gemini/gemini-1.5-pro">
+                  <small>Use LiteLLM format (e.g., openai/gpt-4o, ollama/llama3)</small>
+                </div>
+                <div class="form-group">
+                  <label for="cfg-api_base">API Base URL (Optional)</label>
+                  <input type="text" id="cfg-api_base" name="api_base" placeholder="http://localhost:11434">
+                </div>
+                
+                <h3 style="margin-top:2rem;">API Keys</h3>
+                <div class="form-group">
+                  <label for="cfg-openai_api_key">OpenAI API Key</label>
+                  <div class="input-with-icon">
+                    <input type="password" id="cfg-openai_api_key" name="openai_api_key">
+                    <button type="button" class="eye-toggle"><i data-lucide="eye"></i></button>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label for="cfg-gemini_api_key">Gemini API Key</label>
+                  <div class="input-with-icon">
+                    <input type="password" id="cfg-gemini_api_key" name="gemini_api_key">
+                    <button type="button" class="eye-toggle"><i data-lucide="eye"></i></button>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label for="cfg-anthropic_api_key">Anthropic API Key</label>
+                  <div class="input-with-icon">
+                    <input type="password" id="cfg-anthropic_api_key" name="anthropic_api_key">
+                    <button type="button" class="eye-toggle"><i data-lucide="eye"></i></button>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- Notifications Tab -->
+              <div class="settings-section" id="settings-notifications">
+                <h3>Webhook Integrations</h3>
+                <div class="form-group">
+                  <label for="cfg-slack_webhook_url">Slack Webhook URL</label>
+                  <div class="input-with-icon">
+                    <input type="password" id="cfg-slack_webhook_url" name="slack_webhook_url">
+                    <button type="button" class="eye-toggle"><i data-lucide="eye"></i></button>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label for="cfg-discord_webhook_url">Discord Webhook URL</label>
+                  <div class="input-with-icon">
+                    <input type="password" id="cfg-discord_webhook_url" name="discord_webhook_url">
+                    <button type="button" class="eye-toggle"><i data-lucide="eye"></i></button>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label for="cfg-telegram_bot_token">Telegram Bot Token</label>
+                  <div class="input-with-icon">
+                    <input type="password" id="cfg-telegram_bot_token" name="telegram_bot_token">
+                    <button type="button" class="eye-toggle"><i data-lucide="eye"></i></button>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label for="cfg-telegram_chat_id">Telegram Chat ID</label>
+                  <input type="text" id="cfg-telegram_chat_id" name="telegram_chat_id">
+                </div>
+              </div>
+              
+              <!-- Advanced Tab -->
+              <div class="settings-section" id="settings-advanced">
+                <h3>Agentic Reflection Loop</h3>
+                <div class="form-group">
+                  <label for="cfg-reflection_max_plan_revisions">Max Plan Revisions</label>
+                  <input type="number" id="cfg-reflection_max_plan_revisions" name="reflection_max_plan_revisions" min="1" max="10">
+                  <small>How many times ARIA can rewrite a failed plan.</small>
+                </div>
+                <div class="form-group">
+                  <label for="cfg-reflection_max_execution_retries">Max Execution Retries</label>
+                  <input type="number" id="cfg-reflection_max_execution_retries" name="reflection_max_execution_retries" min="0" max="5">
+                </div>
+                
+                <h3 style="margin-top:2rem;">Memory Management</h3>
+                <div class="form-group">
+                  <label for="cfg-memory_summarize_after_days">Summarize Sessions Older Than (Days)</label>
+                  <input type="number" id="cfg-memory_summarize_after_days" name="memory_summarize_after_days" min="1">
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+        
+        <div class="modal-footer">
+          <span id="settings-status" class="status-msg"></span>
+          <button type="button" id="save-settings-btn" class="primary-btn">Save Configuration</button>
         </div>
       </div>
     </div>

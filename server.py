@@ -61,6 +61,51 @@ async def delete_memory_session(session_id: str):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
+# ── Config / Settings Endpoints ──
+from config import config
+import dotenv
+import os
+
+@app.get("/api/config")
+async def get_config():
+    """Returns the current configuration."""
+    # Convert config to dict
+    config_dict = config.model_dump()
+            
+    return {"config": config_dict}
+
+@app.post("/api/config")
+async def update_config(payload: dict):
+    """Updates the .env file and the in-memory config object."""
+    try:
+        env_path = ".env"
+        if not os.path.exists(env_path):
+            open(env_path, 'a').close() # Create if doesn't exist
+            
+        for key, value in payload.items():
+            if value is None:
+                continue
+                
+            env_key = key.upper()
+            
+            # Write to .env
+            dotenv.set_key(env_path, env_key, str(value))
+            
+            # Update in memory
+            if hasattr(config, key):
+                # Handle type conversion based on original type
+                orig_val = getattr(config, key)
+                if isinstance(orig_val, int):
+                    setattr(config, key, int(value))
+                elif isinstance(orig_val, float):
+                    setattr(config, key, float(value))
+                else:
+                    setattr(config, key, value)
+                    
+        return {"status": "success"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
 from pydantic import BaseModel
 class ModeRequest(BaseModel):
     mode: str

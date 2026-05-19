@@ -530,3 +530,144 @@ body {
 @keyframes core-breathe { 0%, 100% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.1); opacity: 1; } }
 @keyframes core-speak { 0% { transform: scale(1); } 100% { transform: scale(1.4); } }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* --- Settings Modal --- */
+.settings-modal-box {
+  max-width: 900px;
+  width: 95%;
+  height: 80vh;
+}
+.settings-layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+.settings-sidebar {
+  width: 220px;
+  background: rgba(0,0,0,0.3);
+  border-right: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 0;
+}
+.settings-tab {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  padding: 1rem 1.5rem;
+  text-align: left;
+  font-family: var(--font-main);
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  border-left: 3px solid transparent;
+}
+.settings-tab:hover {
+  background: rgba(255,255,255,0.05);
+  color: var(--text-main);
+}
+.settings-tab.active {
+  background: rgba(0, 240, 255, 0.1);
+  color: var(--accent-cyan);
+  border-left-color: var(--accent-cyan);
+}
+
+.settings-content {
+  flex: 1;
+  padding: 2rem;
+  overflow-y: auto;
+}
+.settings-section {
+  display: none;
+  animation: fade-in 0.3s ease;
+}
+.settings-section.active {
+  display: block;
+}
+.settings-section h3 {
+  color: var(--text-main);
+  margin-bottom: 1.5rem;
+  font-size: 1.1rem;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 0.5rem;
+}
+.form-group {
+  margin-bottom: 1.5rem;
+}
+.form-group label {
+  display: block;
+  font-size: 0.9rem;
+  color: var(--text-dim);
+  margin-bottom: 0.5rem;
+}
+.form-group input {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  padding: 0.8rem 1rem;
+  border-radius: 6px;
+  font-family: var(--font-main);
+  font-size: 0.95rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.form-group input:focus {
+  border-color: var(--accent-cyan);
+}
+.form-group small {
+  display: block;
+  margin-top: 0.4rem;
+  color: #666;
+  font-size: 0.8rem;
+}
+.input-with-icon {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.input-with-icon input {
+  padding-right: 2.5rem;
+}
+.eye-toggle {
+  position: absolute;
+  right: 0.8rem;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.eye-toggle:hover {
+  color: var(--accent-cyan);
+}
+
+.modal-footer {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 1.5rem;
+  background: rgba(0,0,0,0.2);
+}
+.status-msg {
+  font-size: 0.9rem;
+}
+.status-msg.success { color: var(--success); }
+.status-msg.error { color: var(--danger); }
+
+.primary-btn {
+  background: var(--accent-cyan);
+  color: #000;
+  border: none;
+  padding: 0.8rem 1.5rem;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+.primary-btn:hover { opacity: 0.8; }
+

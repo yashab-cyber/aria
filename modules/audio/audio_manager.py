@@ -45,8 +45,8 @@ class AudioManager:
             from modules.audio.stt.whisper_adapter import WhisperSTTAdapter
             from config import config
             
-            # Select adapter based on API key availability
-            if config.openai_api_key:
+            # Select adapter based on API key availability and validity
+            if config.openai_api_key and not config.openai_api_key.lower().startswith("dummy"):
                 stt = WhisperSTTAdapter()
             else:
                 stt = GoogleSTTAdapter()

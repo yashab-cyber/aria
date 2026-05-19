@@ -1,7 +1,17 @@
-import { defineConfig } from 'vite';
+import { defineConfig, createLogger } from 'vite';
 import basicSsl from '@vitejs/plugin-basic-ssl';
 
+const customLogger = createLogger();
+const originalLoggerError = customLogger.error;
+customLogger.error = (msg, options) => {
+  if (msg.includes('ws proxy socket error') && msg.includes('ECONNRESET')) {
+    return;
+  }
+  originalLoggerError(msg, options);
+};
+
 export default defineConfig({
+  customLogger: customLogger,
   plugins: [
     basicSsl()
   ],
