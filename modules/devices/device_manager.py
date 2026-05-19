@@ -81,11 +81,7 @@ class DeviceManager:
         name="android_run_command",
         description="Executes a command on a connected Android device (e.g. screenshot, send_whatsapp, open_app, tap). Use list_connected_devices first to get the device_name."
     )
-    def tool_run_command(self, device_name: str, command_type: str, params: str = "{}") -> str:
-        # Since tools are synchronous from ARIA's perspective but our exec is async,
-        # we need to run it in the event loop.
-        import threading
-        
+    async def android_run_command(self, device_name: str, command_type: str, params: str = "{}") -> str:
         parsed_params = {}
         if params:
             try:
@@ -94,26 +90,7 @@ class DeviceManager:
                 pass
                 
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # We are in a thread with a running loop? Actually tools run in executor threads.
-                # So we create a new loop or use run_coroutine_threadsafe.
-                # The safest way is to use the main loop.
-                # But we don't have a direct ref to the main loop here. 
-                # Let's just use asyncio.run if there is no loop.
-                pass
-        except:
-            pass
-            
-        # To run async from sync tool thread:
-        try:
-            # We assume main server loop is running. We can get the running loop if we saved it.
-            # But the easiest way for a sync thread is:
-            result = asyncio.run_coroutine_threadsafe(
-                self.execute_command(device_name, command_type, **parsed_params), 
-                main_loop
-            ).result(timeout=20.0)
-            
+            result = await self.execute_command(device_name, command_type, **parsed_params)
             return json.dumps(result, indent=2)
         except Exception as e:
             return f"Failed to execute on device: {str(e)}"
