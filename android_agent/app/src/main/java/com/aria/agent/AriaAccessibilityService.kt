@@ -1,68 +1,64 @@
 package com.aria.agent
 
 import android.accessibilityservice.AccessibilityService
+import android.app.NotificationManager
+import android.content.Context
 import android.content.Intent
 import android.view.accessibility.AccessibilityEvent
-import android.view.KeyEvent
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.*
+import org.json.JSONObject
 
 class AriaAccessibilityService : AccessibilityService() {
     
-    companion object {
-        var instance: AriaAccessibilityService? = null
-            private set
-    }
-    
-    private val serviceJob = SupervisorJob()
-    val serviceScope = CoroutineScope(Dispatchers.Main + serviceJob)
-    
-    lateinit var webSocketClient: AriaWebSocketClient
-    lateinit var commandHandler: CommandHandler
-    
-    var currentActivePackage: String = ""
-    var currentActiveActivity: String = ""
+    private lateinit var wsClient: AriaWebSocketClient
+    private lateinit var commandHandler: CommandHandler
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    var currentPackage: String = ""
+    var currentActivity: String = ""
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        instance = this
         
-        NotificationHelper.createNotificationChannel(this)
-        startForeground(NotificationHelper.NOTIFICATION_ID, NotificationHelper.buildNotification(this, "Connected"))
+        NotificationHelper.createChannel(this)
+        val notification = NotificationHelper.buildNotification(this, "Starting...")
+        startForeground(NotificationHelper.NOTIFICATION_ID, notification)
         
         commandHandler = CommandHandler(this)
-        webSocketClient = AriaWebSocketClient(this, commandHandler)
-        webSocketClient.connect()
+        wsClient = AriaWebSocketClient(
+            context = this,
+            onCommand = { json -> commandHandler.handle(json) },
+            onStatusChange = { status ->
+                updateNotification(status)
+                broadcastStatus(status)
+            }
+        )
+        scope.launch { wsClient.connect() }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event == null) return
-        
-        // Track the current active app package
-        if (event.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
-            event.packageName?.let { currentActivePackage = it.toString() }
-            event.className?.let { currentActiveActivity = it.toString() }
+        if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            currentPackage = event.packageName?.toString() ?: ""
+            currentActivity = event.className?.toString() ?: ""
         }
     }
 
-    override fun onInterrupt() {
-        // Accessibility service interrupted
+    override fun onInterrupt() {}
+
+    override fun onDestroy() {
+        wsClient.disconnect()
+        scope.cancel()
+        super.onDestroy()
     }
 
-    override fun onUnbind(intent: Intent?): Boolean {
-        instance = null
-        webSocketClient.disconnect()
-        serviceScope.cancel()
-        return super.onUnbind(intent)
+    private fun updateNotification(status: String) {
+        val notification = NotificationHelper.buildNotification(this, status)
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.notify(NotificationHelper.NOTIFICATION_ID, notification)
     }
-    
-    // Allow executors to inject key events directly
-    fun injectKeyEvent(event: KeyEvent): Boolean {
-        // Depending on Android version, filtering key events requires specific APIs.
-        // We will fallback to shell command input if needed by executors.
-        // But for standard global actions, we use performGlobalAction
-        return false
+
+    private fun broadcastStatus(status: String) {
+        val intent = Intent("com.aria.agent.STATUS_UPDATE")
+        intent.putExtra("status", status)
+        sendBroadcast(intent)
     }
 }

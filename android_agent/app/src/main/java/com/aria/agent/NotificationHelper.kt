@@ -10,17 +10,17 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 
 object NotificationHelper {
-    const val CHANNEL_ID = "aria_agent_service"
+    const val CHANNEL_ID = "aria_agent_channel"
     const val NOTIFICATION_ID = 1001
 
-    fun createNotificationChannel(context: Context) {
+    fun createChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "ARIA Agent Service",
+                context.getString(R.string.channel_name),
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Keeps the ARIA Agent connected to the server"
+                description = context.getString(R.string.channel_description)
             }
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.createNotificationChannel(channel)
@@ -37,16 +37,12 @@ object NotificationHelper {
         )
 
         return NotificationCompat.Builder(context, CHANNEL_ID)
-            .setContentTitle("ARIA Agent")
-            .setContentText(status)
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentIntent(pendingIntent)
+            .setContentTitle(context.getString(R.string.notification_title))
+            .setContentText(status)
             .setOngoing(true)
+            .setContentIntent(pendingIntent)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
-    }
-    
-    fun updateNotification(context: Context, status: String) {
-        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        manager.notify(NOTIFICATION_ID, buildNotification(context, status))
     }
 }

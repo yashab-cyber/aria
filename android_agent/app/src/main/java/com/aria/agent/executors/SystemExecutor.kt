@@ -1,141 +1,142 @@
 package com.aria.agent.executors
 
-import android.app.NotificationManager
-import android.content.ClipboardManager
 import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
 import android.net.Uri
 import android.net.wifi.WifiManager
 import android.os.BatteryManager
-import android.content.IntentFilter
+import android.os.Build
+import android.provider.Settings
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import com.aria.agent.AriaAccessibilityService
+import com.aria.agent.NotificationHelper
+import org.json.JSONObject
 
 class SystemExecutor(private val service: AriaAccessibilityService) {
 
-    fun getBattery(): Map<String, Any?> {
-        val filter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
-        val intent = service.registerReceiver(null, filter)
+    fun getBattery(): JSONObject {
+        val filter = android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+        val batteryStatus = service.registerReceiver(null, filter)
         
-        val level = intent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
-        val status = intent?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
-        val charging = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL
-        val plugged = intent?.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1) ?: -1
-        val temp = (intent?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 0) ?: 0) / 10.0f
+        val level = batteryStatus?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+        val status = batteryStatus?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
+        val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL
+        val chargePlug = batteryStatus?.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1) ?: -1
         
-        val plugStr = when (plugged) {
-            BatteryManager.BATTERY_PLUGGED_AC -> "AC"
-            BatteryManager.BATTERY_PLUGGED_USB -> "USB"
-            BatteryManager.BATTERY_PLUGGED_WIRELESS -> "WIRELESS"
-            else -> "UNPLUGGED"
+        val plugged = when (chargePlug) {
+            BatteryManager.BATTERY_PLUGGED_USB -> "usb"
+            BatteryManager.BATTERY_PLUGGED_AC -> "ac"
+            BatteryManager.BATTERY_PLUGGED_WIRELESS -> "wireless"
+            else -> "none"
         }
         
-        return mapOf(
-            "level" to level,
-            "charging" to charging,
-            "plugged" to plugStr,
-            "temperature" to temp
-        )
+        val tempC = (batteryStatus?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 0) ?: 0) / 10.0f
+        val voltage = batteryStatus?.getIntExtra(BatteryManager.EXTRA_VOLTAGE, 0) ?: 0
+        
+        return JSONObject().apply {
+            put("level", level)
+            put("charging", isCharging)
+            put("plugged", plugged)
+            put("temperature_c", tempC)
+            put("voltage_mv", voltage)
+        }
     }
 
-    fun getWifi(): Map<String, Any?> {
+    fun getWifi(): JSONObject {
         val wifiManager = service.applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
         val info = wifiManager.connectionInfo
         
-        val ip = info.ipAddress
-        val ipString = String.format(
-            "%d.%d.%d.%d",
-            ip and 0xff,
-            ip shr 8 and 0xff,
-            ip shr 16 and 0xff,
-            ip shr 24 and 0xff
-        )
-        
-        return mapOf(
-            "ssid" to info.ssid?.replace("\"", ""),
-            "ip" to ipString,
-            "signal_strength" to WifiManager.calculateSignalLevel(info.rssi, 100),
-            "connected" to (ip != 0)
-        )
-    }
-
-    fun getClipboard(): Map<String, Any?> {
-        val clipboard = service.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        if (clipboard.hasPrimaryClip()) {
-            val item = clipboard.primaryClip?.getItemAt(0)
-            return mapOf("text" to (item?.text?.toString() ?: ""))
+        return JSONObject().apply {
+            put("ssid", info.ssid?.removePrefix("\"")?.removeSuffix("\""))
+            put("bssid", info.bssid)
+            put("ip", formatIp(info.ipAddress))
+            put("signal_strength", info.rssi)
+            put("connected", info.networkId != -1)
+            put("link_speed_mbps", info.linkSpeed)
         }
-        return mapOf("text" to "")
     }
 
-    fun setClipboard(params: Map<String, Any>): Map<String, Any?> {
-        val text = params["text"] as? String ?: return mapOf("status" to "error")
+    private fun formatIp(ip: Int): String {
+        return "${ip and 0xFF}.${ip shr 8 and 0xFF}.${ip shr 16 and 0xFF}.${ip shr 24 and 0xFF}"
+    }
+
+    fun getClipboard(): JSONObject {
         val clipboard = service.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = ClipData.newPlainText("ARIA", text)
-        clipboard.setPrimaryClip(clip)
-        return mapOf("status" to "ok")
+        val text = clipboard.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
+        return JSONObject().apply { put("text", text) }
     }
 
-    fun sendNotification(params: Map<String, Any>): Map<String, Any?> {
-        val title = params["title"] as? String ?: "ARIA"
-        val message = params["message"] as? String ?: return mapOf("status" to "error")
-        
-        val manager = service.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val builder = NotificationCompat.Builder(service, "aria_agent_service")
+    fun setClipboard(text: String): JSONObject {
+        val clipboard = service.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("aria", text))
+        return JSONObject().apply { put("status", "ok") }
+    }
+
+    fun sendNotification(title: String, message: String): JSONObject {
+        val notification = NotificationCompat.Builder(service, NotificationHelper.CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentTitle(title)
             .setContentText(message)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .build()
             
-        manager.notify(System.currentTimeMillis().toInt(), builder.build())
-        return mapOf("status" to "ok")
+        // Might need POST_NOTIFICATIONS on API 33+ but service already requests it via SettingsActivity
+        try {
+            NotificationManagerCompat.from(service).notify(System.currentTimeMillis().toInt(), notification)
+        } catch (e: SecurityException) {
+            return JSONObject().apply { put("error", "Missing POST_NOTIFICATIONS permission") }
+        }
+        return JSONObject().apply { put("status", "ok") }
     }
 
-    fun setVolume(params: Map<String, Any>): Map<String, Any?> {
-        val streamStr = params["stream"] as? String ?: "music"
-        val levelPercent = params["level"] as? Int ?: return mapOf("status" to "error")
-        
-        val stream = when (streamStr) {
+    fun setVolume(streamStr: String, level: Int): JSONObject {
+        val audioManager = service.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val stream = when (streamStr.lowercase()) {
+            "music" -> AudioManager.STREAM_MUSIC
             "ring" -> AudioManager.STREAM_RING
             "alarm" -> AudioManager.STREAM_ALARM
+            "voice_call" -> AudioManager.STREAM_VOICE_CALL
+            "notification" -> AudioManager.STREAM_NOTIFICATION
             else -> AudioManager.STREAM_MUSIC
         }
         
-        val audioManager = service.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         val max = audioManager.getStreamMaxVolume(stream)
-        val target = (max * (levelPercent / 100.0)).toInt()
+        val target = ((level / 100.0) * max).toInt().coerceIn(0, max)
         
-        audioManager.setStreamVolume(stream, target, 0)
-        return mapOf("status" to "ok")
+        try {
+            audioManager.setStreamVolume(stream, target, AudioManager.FLAG_SHOW_UI)
+        } catch (e: Exception) {
+            return JSONObject().apply { put("error", "Do Not Disturb might be active") }
+        }
+        return JSONObject().apply {
+            put("status", "ok")
+            put("stream", streamStr)
+            put("level", level)
+        }
     }
 
-    fun sendSms(params: Map<String, Any>): Map<String, Any?> {
-        val number = params["number"] as? String ?: return mapOf("status" to "error")
-        val message = params["message"] as? String ?: return mapOf("status" to "error")
-        
-        val intent = Intent(Intent.ACTION_SENDTO).apply {
-            data = Uri.parse("smsto:$number")
+    fun sendSms(number: String, message: String): JSONObject {
+        val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("sms:$number")).apply {
             putExtra("sms_body", message)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         service.startActivity(intent)
-        return mapOf("status" to "ok")
+        return JSONObject().apply { put("status", "ok") }
     }
 
-    fun makeCall(params: Map<String, Any>): Map<String, Any?> {
-        val number = params["number"] as? String ?: return mapOf("status" to "error")
-        val intent = Intent(Intent.ACTION_CALL).apply {
-            data = Uri.parse("tel:$number")
+    fun makeCall(number: String): JSONObject {
+        val intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:$number")).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        
-        return try {
+        try {
             service.startActivity(intent)
-            mapOf("status" to "ok")
         } catch (e: SecurityException) {
-            mapOf("status" to "error", "message" to "CALL_PHONE permission required")
+            return JSONObject().apply { put("error", "Missing CALL_PHONE permission") }
         }
+        return JSONObject().apply { put("status", "ok") }
     }
 }

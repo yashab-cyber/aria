@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">ARIA Agent</string>
-    <string name="accessibility_service_description">ARIA Agent allows remote control of this device by the ARIA intelligent assistant.</string>
+    <string name="accessibility_description">This service allows the ARIA AI to securely control this device remotely.</string>
+    <string name="channel_name">ARIA Agent Service</string>
+    <string name="channel_description">Keeps ARIA Agent running in background</string>
+    <string name="notification_title">ARIA Agent</string>
+    <string name="notification_connected">Connected to ARIA server</string>
+    <string name="notification_disconnected">Disconnected – reconnecting...</string>
+    <string name="notification_connecting">Connecting to ARIA server...</string>
 </resources>

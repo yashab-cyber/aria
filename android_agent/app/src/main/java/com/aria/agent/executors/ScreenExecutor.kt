@@ -1,137 +1,166 @@
 package com.aria.agent.executors
 
+import android.graphics.Bitmap
 import android.graphics.Rect
+import android.os.Build
 import android.util.Base64
+import android.view.Display
+import android.view.PixelCopy
+import android.view.WindowManager
 import android.view.accessibility.AccessibilityNodeInfo
 import com.aria.agent.AriaAccessibilityService
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 class ScreenExecutor(private val service: AriaAccessibilityService) {
 
-    fun screenshot(): Map<String, Any?> {
-        try {
-            // Using screencap via shell as fallback since MediaProjection requires Activity result
-            val tempFile = File("/sdcard/.aria_tmp.png")
-            val process = Runtime.getRuntime().exec("screencap -p ${tempFile.absolutePath}")
-            process.waitFor()
-            
-            if (tempFile.exists()) {
-                val bytes = tempFile.readBytes()
-                val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
-                tempFile.delete()
-                return mapOf("image_b64" to b64, "format" to "png")
+    fun screenshot(): JSONObject {
+        return try {
+            val b64 = takeScreenshotFallback()
+            JSONObject().apply {
+                put("image_b64", b64)
+                put("format", "png")
             }
         } catch (e: Exception) {
-            return mapOf("status" to "error", "message" to e.message)
+            JSONObject().apply { put("error", "Failed to take screenshot: ${e.message}") }
         }
-        return mapOf("status" to "error", "message" to "screencap failed")
     }
 
-    fun readScreen(params: Map<String, Any>): Map<String, Any?> {
-        val filter = params["filter"] as? String
-        val root = service.rootInActiveWindow ?: return mapOf("texts" to emptyList<Any>())
+    private fun takeScreenshotFallback(): String {
+        val file = File("/sdcard/.aria_screen.png")
+        val p = Runtime.getRuntime().exec("screencap -p ${file.absolutePath}")
+        p.waitFor()
         
-        val results = mutableListOf<Map<String, Any>>()
-        traverseForText(root, filter?.lowercase(), results)
-        
-        return mapOf("texts" to results)
+        if (!file.exists()) throw Exception("Screencap failed to create file")
+        val bytes = file.readBytes()
+        file.delete()
+        return Base64.encodeToString(bytes, Base64.NO_WRAP)
     }
 
-    private fun traverseForText(node: AccessibilityNodeInfo, filter: String?, results: MutableList<Map<String, Any>>) {
-        val text = node.text?.toString() ?: node.contentDescription?.toString()
+    fun readScreen(filter: String?): JSONObject {
+        val root = service.rootInActiveWindow ?: return JSONObject().apply { put("error", "Window not accessible") }
+        val texts = mutableListOf<JSONObject>()
         
-        if (!text.isNullOrBlank()) {
-            if (filter == null || text.lowercase().contains(filter)) {
-                val bounds = Rect()
-                node.getBoundsInScreen(bounds)
-                results.add(mapOf(
-                    "text" to text,
-                    "bounds" to "${bounds.left},${bounds.top},${bounds.right},${bounds.bottom}",
-                    "clickable" to node.isClickable
-                ))
+        fun traverse(node: AccessibilityNodeInfo) {
+            val text = node.text?.toString() ?: node.contentDescription?.toString()
+            if (!text.isNullOrBlank()) {
+                if (filter == null || text.contains(filter, ignoreCase = true)) {
+                    val rect = Rect()
+                    node.getBoundsInScreen(rect)
+                    texts.add(JSONObject().apply {
+                        put("text", text)
+                        put("bounds", rect.toShortString())
+                        put("clickable", node.isClickable)
+                        put("class", node.className)
+                    })
+                }
+            }
+            for (i in 0 until node.childCount) {
+                node.getChild(i)?.let { traverse(it) }
             }
         }
         
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i) ?: continue
-            traverseForText(child, filter, results)
+        traverse(root)
+        
+        return JSONObject().apply {
+            put("texts", JSONArray(texts))
+            put("count", texts.size)
         }
     }
 
-    fun uiDump(params: Map<String, Any>): Map<String, Any?> {
-        val includeNonVisible = params["include_non_visible"] as? Boolean ?: false
-        val root = service.rootInActiveWindow ?: return mapOf("nodes" to emptyList<Any>())
+    fun uiDump(includeNonVisible: Boolean): JSONObject {
+        val root = service.rootInActiveWindow ?: return JSONObject().apply { put("error", "Window not accessible") }
+        val tree = JSONArray()
+        var totalNodes = 0
         
-        val results = mutableListOf<Map<String, Any>>()
-        traverseForDump(root, 0, includeNonVisible, results)
+        fun traverse(node: AccessibilityNodeInfo, depth: Int): JSONObject {
+            totalNodes++
+            val rect = Rect()
+            node.getBoundsInScreen(rect)
+            
+            val obj = JSONObject().apply {
+                put("class", node.className)
+                put("text", node.text)
+                put("desc", node.contentDescription)
+                put("id", node.viewIdResourceName)
+                put("bounds", rect.toShortString())
+                put("clickable", node.isClickable)
+                put("scrollable", node.isScrollable)
+                put("editable", node.isEditable)
+                put("enabled", node.isEnabled)
+                put("focusable", node.isFocusable)
+                put("depth", depth)
+                put("child_count", node.childCount)
+            }
+            
+            if (node.childCount > 0) {
+                val children = JSONArray()
+                for (i in 0 until node.childCount) {
+                    node.getChild(i)?.let { 
+                        if (includeNonVisible || it.isVisibleToUser) {
+                            children.put(traverse(it, depth + 1))
+                        }
+                    }
+                }
+                obj.put("children", children)
+            }
+            return obj
+        }
         
-        return mapOf("nodes" to results)
-    }
-
-    private fun traverseForDump(node: AccessibilityNodeInfo, depth: Int, includeNonVisible: Boolean, results: MutableList<Map<String, Any>>) {
-        if (!includeNonVisible && !node.isVisibleToUser) return
+        tree.put(traverse(root, 0))
         
-        val bounds = Rect()
-        node.getBoundsInScreen(bounds)
-        
-        results.add(mapOf(
-            "class" to (node.className?.toString() ?: ""),
-            "text" to (node.text?.toString() ?: ""),
-            "desc" to (node.contentDescription?.toString() ?: ""),
-            "id" to (node.viewIdResourceName ?: ""),
-            "bounds" to "${bounds.left},${bounds.top},${bounds.right},${bounds.bottom}",
-            "clickable" to node.isClickable,
-            "scrollable" to node.isScrollable,
-            "editable" to node.isEditable,
-            "depth" to depth
-        ))
-        
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i) ?: continue
-            traverseForDump(child, depth + 1, includeNonVisible, results)
+        return JSONObject().apply {
+            put("tree", tree)
+            put("total_nodes", totalNodes)
         }
     }
 
-    fun findElement(params: Map<String, Any>): Map<String, Any?> {
-        val by = params["by"] as? String ?: return mapOf("found" to false)
-        val value = params["value"] as? String ?: return mapOf("found" to false)
-        val root = service.rootInActiveWindow ?: return mapOf("found" to false)
+    fun findElement(by: String, value: String): JSONObject {
+        val root = service.rootInActiveWindow ?: return JSONObject().apply { put("found", false) }
         
         val node = when (by) {
+            "text" -> root.findAccessibilityNodeInfosByText(value).firstOrNull()
             "id" -> root.findAccessibilityNodeInfosByViewId(value).firstOrNull()
-            "text", "desc", "class" -> findNodeGeneric(root, by, value.lowercase())
+            "desc" -> findNodeByContentDesc(root, value)
+            "class" -> findNodeByClass(root, value)
             else -> null
         }
         
         if (node != null) {
-            val bounds = Rect()
-            node.getBoundsInScreen(bounds)
-            return mapOf(
-                "found" to true,
-                "x" to bounds.centerX(),
-                "y" to bounds.centerY(),
-                "width" to bounds.width(),
-                "height" to bounds.height(),
-                "text" to (node.text ?: node.contentDescription ?: "").toString(),
-                "id" to (node.viewIdResourceName ?: "")
-            )
+            val rect = Rect()
+            node.getBoundsInScreen(rect)
+            return JSONObject().apply {
+                put("found", true)
+                put("x", rect.centerX())
+                put("y", rect.centerY())
+                put("width", rect.width())
+                put("height", rect.height())
+                put("text", node.text)
+            }
         }
-        return mapOf("found" to false)
+        return JSONObject().apply { put("found", false) }
     }
-    
-    private fun findNodeGeneric(root: AccessibilityNodeInfo, by: String, value: String): AccessibilityNodeInfo? {
-        val matches = when (by) {
-            "text" -> root.text?.toString()?.lowercase()?.contains(value) == true
-            "desc" -> root.contentDescription?.toString()?.lowercase()?.contains(value) == true
-            "class" -> root.className?.toString()?.lowercase()?.contains(value) == true
-            else -> false
-        }
-        if (matches) return root
-        
+
+    private fun findNodeByContentDesc(root: AccessibilityNodeInfo, desc: String): AccessibilityNodeInfo? {
+        if (root.contentDescription?.toString()?.contains(desc, true) == true) return root
         for (i in 0 until root.childCount) {
             val child = root.getChild(i) ?: continue
-            val found = findNodeGeneric(child, by, value)
-            if (found != null) return found
+            val result = findNodeByContentDesc(child, desc)
+            if (result != null) return result
+        }
+        return null
+    }
+    
+    private fun findNodeByClass(root: AccessibilityNodeInfo, className: String): AccessibilityNodeInfo? {
+        if (root.className?.toString() == className) return root
+        for (i in 0 until root.childCount) {
+            val child = root.getChild(i) ?: continue
+            val result = findNodeByClass(child, className)
+            if (result != null) return result
         }
         return null
     }

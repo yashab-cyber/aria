@@ -1,58 +1,84 @@
 package com.aria.agent.executors
 
+import android.accessibilityservice.AccessibilityService
 import android.content.Intent
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import android.net.Uri
 import com.aria.agent.AriaAccessibilityService
+import org.json.JSONArray
+import org.json.JSONObject
 
 class AppExecutor(private val service: AriaAccessibilityService) {
 
-    fun openApp(params: Map<String, Any>): Map<String, Any?> {
-        val packageName = params["package"] as? String ?: return mapOf("status" to "error", "message" to "package required")
-        val pm = service.packageManager
-        val intent = pm.getLaunchIntentForPackage(packageName)
+    fun openApp(packageName: String): JSONObject {
+        val intent = service.packageManager.getLaunchIntentForPackage(packageName)
         if (intent != null) {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             service.startActivity(intent)
-            return mapOf("status" to "ok")
+            return JSONObject().apply {
+                put("status", "ok")
+                put("package", packageName)
+            }
         }
-        return mapOf("status" to "not_found")
+        return JSONObject().apply {
+            put("status", "not_found")
+            put("package", packageName)
+        }
     }
 
-    fun closeApp(params: Map<String, Any>): Map<String, Any?> {
-        // Accessibility service cannot arbitrarily kill background apps easily, 
-        // but we can send user to HOME to background the current app.
-        service.performGlobalAction(AriaAccessibilityService.GLOBAL_ACTION_HOME)
-        return mapOf("status" to "ok")
+    fun closeApp(packageName: String): JSONObject {
+        service.performGlobalAction(AccessibilityService.GLOBAL_ACTION_HOME)
+        return JSONObject().apply {
+            put("status", "ok")
+        }
     }
 
-    fun listApps(params: Map<String, Any>): Map<String, Any?> {
-        val includeSystem = params["include_system"] as? Boolean ?: false
+    fun listApps(includeSystem: Boolean): JSONObject {
         val pm = service.packageManager
-        val apps = pm.getInstalledApplications(0).mapNotNull { info ->
-            val isSystem = (info.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0
-            if (!includeSystem && isSystem) null
-            else mapOf(
-                "name" to pm.getApplicationLabel(info).toString(),
-                "package" to info.packageName,
-                "system" to isSystem
-            )
+        val packages = pm.getInstalledApplications(PackageManager.GET_META_DATA)
+        val jsonArray = JSONArray()
+
+        for (appInfo in packages) {
+            val isSystem = (appInfo.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+            if (!includeSystem && isSystem) continue
+
+            val name = pm.getApplicationLabel(appInfo).toString()
+            val version = try {
+                pm.getPackageInfo(appInfo.packageName, 0).versionName
+            } catch (e: Exception) {
+                "unknown"
+            }
+
+            jsonArray.put(JSONObject().apply {
+                put("name", name)
+                put("package", appInfo.packageName)
+                put("version", version)
+                put("system", isSystem)
+            })
         }
-        return mapOf("apps" to apps)
+
+        return JSONObject().apply {
+            put("apps", jsonArray)
+            put("count", jsonArray.length())
+        }
     }
 
-    fun getCurrentApp(): Map<String, Any?> {
-        return mapOf(
-            "package" to service.currentActivePackage,
-            "activity" to service.currentActiveActivity
-        )
+    fun getCurrentApp(): JSONObject {
+        return JSONObject().apply {
+            put("package", service.currentPackage)
+            put("activity", service.currentActivity)
+        }
     }
 
-    fun openUrl(params: Map<String, Any>): Map<String, Any?> {
-        val url = params["url"] as? String ?: return mapOf("status" to "error", "message" to "url required")
+    fun openUrl(url: String): JSONObject {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         service.startActivity(intent)
-        return mapOf("status" to "ok")
+        return JSONObject().apply {
+            put("status", "ok")
+            put("url", url)
+        }
     }
 }

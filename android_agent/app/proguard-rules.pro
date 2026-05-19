@@ -1,0 +1,8 @@
+-keep class com.aria.agent.** { *; }
+-keep class okhttp3.** { *; }
+-keep class okio.** { *; }
+-keep class com.google.gson.** { *; }
+-keepattributes *Annotation*
+-keepattributes SourceFile,LineNumberTable
+-dontwarn okhttp3.**
+-dontwarn okio.**

@@ -2,92 +2,88 @@ package com.aria.agent.executors
 
 import android.util.Base64
 import com.aria.agent.AriaAccessibilityService
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
-import java.nio.file.Files
-import java.nio.file.Paths
+import java.net.URLConnection
 
 class FileExecutor(private val service: AriaAccessibilityService) {
 
-    fun readFile(params: Map<String, Any>): Map<String, Any?> {
-        val path = params["path"] as? String ?: return mapOf("status" to "error", "message" to "path required")
-        
+    fun readFile(path: String): JSONObject {
         return try {
             val file = File(path)
-            if (!file.exists() || !file.isFile) return mapOf("status" to "error", "message" to "file not found")
+            if (!file.exists()) return errorJson("File not found")
             
             val bytes = file.readBytes()
             val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
-            var mime = "application/octet-stream"
-            try {
-                mime = Files.probeContentType(Paths.get(path)) ?: mime
-            } catch (e: Exception) {}
+            val mimeType = URLConnection.guessContentTypeFromName(path) ?: "application/octet-stream"
             
-            mapOf("content_b64" to b64, "size_bytes" to bytes.size, "mime_type" to mime)
+            JSONObject().apply {
+                put("content_b64", b64)
+                put("size_bytes", bytes.size)
+                put("mime_type", mimeType)
+                put("name", file.name)
+            }
         } catch (e: SecurityException) {
-            mapOf("status" to "error", "message" to "permission denied")
+            errorJson("Permission denied")
         } catch (e: Exception) {
-            mapOf("status" to "error", "message" to e.message)
+            errorJson(e.message ?: "Unknown error")
         }
     }
 
-    fun writeFile(params: Map<String, Any>): Map<String, Any?> {
-        val path = params["path"] as? String ?: return mapOf("status" to "error", "message" to "path required")
-        val b64 = params["content_b64"] as? String ?: return mapOf("status" to "error", "message" to "content_b64 required")
-        
+    fun writeFile(path: String, contentB64: String): JSONObject {
         return try {
-            val bytes = Base64.decode(b64, Base64.NO_WRAP)
+            val bytes = Base64.decode(contentB64, Base64.NO_WRAP)
             val file = File(path)
             file.parentFile?.mkdirs()
             file.writeBytes(bytes)
             
-            mapOf("status" to "ok", "bytes_written" to bytes.size)
-        } catch (e: SecurityException) {
-            mapOf("status" to "error", "message" to "permission denied")
+            JSONObject().apply {
+                put("status", "ok")
+                put("bytes_written", bytes.size)
+                put("path", path)
+            }
         } catch (e: Exception) {
-            mapOf("status" to "error", "message" to e.message)
+            errorJson(e.message ?: "Unknown error")
         }
     }
 
-    fun listFiles(params: Map<String, Any>): Map<String, Any?> {
-        val path = params["path"] as? String ?: return mapOf("status" to "error", "message" to "path required")
-        
+    fun listFiles(path: String, recursive: Boolean): JSONObject {
         return try {
             val dir = File(path)
-            if (!dir.exists() || !dir.isDirectory) return mapOf("status" to "error", "message" to "directory not found")
+            if (!dir.exists() || !dir.isDirectory) return errorJson("Not a directory")
             
-            val files = dir.listFiles()?.map {
-                mapOf(
-                    "name" to it.name,
-                    "path" to it.absolutePath,
-                    "size" to it.length(),
-                    "is_dir" to it.isDirectory,
-                    "modified" to it.lastModified()
-                )
-            } ?: emptyList()
+            val files = if (recursive) dir.walkTopDown() else dir.listFiles()?.asSequence()
+            val jsonArray = JSONArray()
             
-            mapOf("files" to files)
-        } catch (e: SecurityException) {
-            mapOf("status" to "error", "message" to "permission denied")
+            files?.forEach { f ->
+                jsonArray.put(JSONObject().apply {
+                    put("name", f.name)
+                    put("path", f.absolutePath)
+                    put("size", if (f.isFile) f.length() else 0)
+                    put("is_dir", f.isDirectory)
+                    put("modified", f.lastModified())
+                })
+            }
+            
+            JSONObject().apply {
+                put("files", jsonArray)
+                put("count", jsonArray.length())
+            }
         } catch (e: Exception) {
-            mapOf("status" to "error", "message" to e.message)
+            errorJson(e.message ?: "Unknown error")
         }
     }
 
-    fun deleteFile(params: Map<String, Any>): Map<String, Any?> {
-        val path = params["path"] as? String ?: return mapOf("status" to "error", "message" to "path required")
-        
-        return try {
-            val file = File(path)
-            if (file.exists()) {
-                val deleted = if (file.isDirectory) file.deleteRecursively() else file.delete()
-                mapOf("status" to if (deleted) "ok" else "error")
-            } else {
-                mapOf("status" to "ok") // Already gone
-            }
-        } catch (e: SecurityException) {
-            mapOf("status" to "error", "message" to "permission denied")
-        } catch (e: Exception) {
-            mapOf("status" to "error", "message" to e.message)
+    fun deleteFile(path: String): JSONObject {
+        val deleted = File(path).delete()
+        return JSONObject().apply {
+            put("status", if (deleted) "ok" else "error")
+            put("path", path)
         }
+    }
+
+    private fun errorJson(msg: String): JSONObject {
+        return JSONObject().apply { put("error", msg) }
     }
 }

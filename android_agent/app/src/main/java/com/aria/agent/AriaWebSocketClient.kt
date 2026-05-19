@@ -2,152 +2,148 @@ package com.aria.agent
 
 import android.content.Context
 import android.os.Build
-import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
-import com.google.gson.Gson
 import kotlinx.coroutines.*
 import okhttp3.*
+import org.json.JSONArray
+import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 import kotlin.math.min
-import kotlin.math.pow
 
 class AriaWebSocketClient(
-    private val service: AriaAccessibilityService,
-    private val commandHandler: CommandHandler
+    private val context: Context,
+    private val onCommand: suspend (JSONObject) -> JSONObject,
+    private val onStatusChange: (String) -> Unit
 ) {
-    private val TAG = "ARIA_WS"
-    
     private var webSocket: WebSocket? = null
-    private val client = OkHttpClient.Builder()
-        .readTimeout(0, TimeUnit.MILLISECONDS)
-        .pingInterval(30, TimeUnit.SECONDS)
-        .build()
-        
-    private val gson = Gson()
-    private var isConnected = false
-    private var reconnectAttempt = 0
-    private var reconnectJob: Job? = null
-    
+    private var isConnected: Boolean = false
+    private var retryDelayMs: Long = 3000
+    private val maxRetryDelayMs: Long = 60000
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
     fun connect() {
-        if (isConnected) return
-        
-        val prefs = service.getSharedPreferences("aria_prefs", Context.MODE_PRIVATE)
+        val masterKey = MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+        val prefs = EncryptedSharedPreferences.create(
+            context, "aria_prefs", masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
+
         val url = prefs.getString("server_url", "") ?: ""
-        
-        if (url.isEmpty()) {
-            Log.e(TAG, "No server URL configured")
-            NotificationHelper.updateNotification(service, "Missing Server URL")
+        val token = prefs.getString("auth_token", "") ?: ""
+        val deviceName = prefs.getString("device_name", Build.MODEL) ?: Build.MODEL
+
+        if (url.isBlank()) {
+            onStatusChange("No server URL configured")
             return
         }
-        
-        Log.i(TAG, "Connecting to $url")
-        NotificationHelper.updateNotification(service, "Connecting...")
-        
-        val request = Request.Builder().url(url).build()
-        
+
+        val client = OkHttpClient.Builder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .build()
+
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("X-Token", token)
+            .build()
+
         webSocket = client.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                Log.i(TAG, "Connected to ARIA Server")
                 isConnected = true
-                reconnectAttempt = 0
-                NotificationHelper.updateNotification(service, "Connected")
-                sendRegistration()
-            }
-            
-            override fun onMessage(webSocket: WebSocket, text: String) {
-                Log.d(TAG, "Received message: $text")
-                try {
-                    val map = gson.fromJson(text, Map::class.java) as Map<String, Any>
-                    val type = map["type"] as? String ?: return
-                    
-                    if (type == "ping") {
-                        val timestamp = System.currentTimeMillis()
-                        webSocket.send(gson.toJson(mapOf("type" to "pong", "timestamp" to timestamp)))
-                        return
-                    }
-                    
-                    val commandId = map["command_id"] as? String ?: return
-                    
-                    // Dispatch to handler in coroutine
-                    service.serviceScope.launch(Dispatchers.IO) {
-                        try {
-                            val result = commandHandler.handleCommand(type, map)
-                            sendResult(commandId, "ok", result)
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Error handling command", e)
-                            sendResult(commandId, "error", mapOf("message" to (e.message ?: "Unknown error")))
+                retryDelayMs = 3000
+                onStatusChange("Connected")
+
+                val capabilities = JSONArray(listOf(
+                    "tap", "tap_by_text", "tap_by_id", "long_press", "swipe", "type_text", "clear_text", "key_event", "scroll",
+                    "screenshot", "read_screen", "ui_dump", "find_element",
+                    "open_app", "close_app", "list_apps", "get_current_app", "open_url",
+                    "send_whatsapp", "read_whatsapp", "whatsapp_send_file",
+                    "read_file", "write_file", "list_files", "delete_file",
+                    "get_battery", "get_wifi", "get_clipboard", "set_clipboard", "send_notification", "set_volume", "send_sms", "make_call",
+                    "media_play_pause", "media_next", "media_previous", "set_brightness"
+                ))
+
+                val reg = JSONObject().apply {
+                    put("type", "register")
+                    put("name", deviceName)
+                    put("platform", "android")
+                    put("android_version", Build.VERSION.RELEASE)
+                    put("model", Build.MODEL)
+                    put("manufacturer", Build.MANUFACTURER)
+                    put("capabilities", capabilities)
+                }
+                webSocket.send(reg.toString())
+
+                // Heartbeat
+                scope.launch {
+                    while (isConnected) {
+                        delay(30000)
+                        val ping = JSONObject().apply {
+                            put("type", "ping")
+                            put("timestamp", System.currentTimeMillis())
                         }
+                        webSocket.send(ping.toString())
                     }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to parse message", e)
                 }
             }
-            
-            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                Log.i(TAG, "WebSocket Closed: $reason")
+
+            override fun onMessage(webSocket: WebSocket, text: String) {
+                scope.launch {
+                    try {
+                        val json = JSONObject(text)
+                        if (json.optString("type") == "ping") {
+                            val pong = JSONObject().apply {
+                                put("type", "pong")
+                                put("timestamp", System.currentTimeMillis())
+                            }
+                            webSocket.send(pong.toString())
+                        } else {
+                            val result = onCommand(json)
+                            webSocket.send(result.toString())
+                        }
+                    } catch (e: Exception) {
+                        // ignore malformed JSON
+                    }
+                }
+            }
+
+            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
                 isConnected = false
+                onStatusChange("Disconnected")
                 scheduleReconnect()
             }
-            
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                Log.e(TAG, "WebSocket Failure", t)
+
+            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                 isConnected = false
+                onStatusChange("Disconnected")
+            }
+
+            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                isConnected = false
+                onStatusChange("Error: ${t.message}")
                 scheduleReconnect()
             }
         })
     }
-    
-    private fun sendRegistration() {
-        val prefs = service.getSharedPreferences("aria_prefs", Context.MODE_PRIVATE)
-        val name = prefs.getString("device_name", Build.MODEL) ?: Build.MODEL
-        
-        val reg = mapOf(
-            "type" to "register",
-            "name" to name,
-            "platform" to "android",
-            "android_version" to Build.VERSION.RELEASE,
-            "model" to Build.MODEL,
-            "capabilities" to listOf(
-                "tap", "swipe", "type_text", "key_event",
-                "screenshot", "read_screen", "ui_dump",
-                "open_app", "close_app", "list_apps",
-                "read_file", "write_file", "list_files",
-                "send_whatsapp", "read_whatsapp",
-                "send_sms", "make_call",
-                "get_battery", "get_wifi", "set_volume",
-                "set_brightness", "get_clipboard", "set_clipboard",
-                "send_notification", "open_url"
-            )
-        )
-        webSocket?.send(gson.toJson(reg))
-    }
-    
-    private fun sendResult(commandId: String, status: String, data: Map<String, Any?>) {
-        val response = mapOf(
-            "type" to "result",
-            "command_id" to commandId,
-            "status" to status,
-            "data" to data
-        )
-        webSocket?.send(gson.toJson(response))
-    }
-    
+
     private fun scheduleReconnect() {
-        reconnectJob?.cancel()
-        reconnectJob = service.serviceScope.launch {
-            val delaySeconds = min(60.0, 3.0 * (1.5).pow(reconnectAttempt)).toLong()
-            Log.i(TAG, "Scheduling reconnect in $delaySeconds seconds")
-            NotificationHelper.updateNotification(service, "Reconnecting in ${delaySeconds}s...")
-            delay(delaySeconds * 1000)
-            reconnectAttempt++
+        scope.launch {
+            onStatusChange("Reconnecting in ${retryDelayMs / 1000}s...")
+            delay(retryDelayMs)
+            retryDelayMs = min((retryDelayMs * 1.5).toLong(), maxRetryDelayMs)
             connect()
         }
     }
-    
+
     fun disconnect() {
-        reconnectJob?.cancel()
-        webSocket?.close(1000, "Service shutting down")
+        webSocket?.close(1000, "User disconnect")
+        scope.cancel()
         isConnected = false
     }
+
+    fun isConnected(): Boolean = isConnected
 }
