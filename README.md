@@ -42,6 +42,11 @@ ARIA is built on an agentic architecture featuring a self-reflective planning lo
 - **Dynamic Execution**: Execute Python and Node.js code dynamically in isolated sandboxes.
 - **System Shell & File I/O**: Native shell execution and surgical file editing capabilities across your workspace.
 
+### 📱 Android Device Automation (ARIA Agent)
+- **Persistent Remote Control**: The included `aria_android_agent` app runs as a background Accessibility Service, connecting back to the server via WebSockets.
+- **Multi-Strategy Resilience**: Advanced fallback mechanisms (ID, Content Desc, positional heuristics) to survive UI updates on apps like WhatsApp.
+- **Full Automation Suite**: Supports simulated gestures (tap, swipe, type), UI tree dumping, clipboard access, shell screenshots, and file I/O operations directly from the AI.
+
 ### ⏰ Scheduler & Notifications
 - **Autonomous Tasks**: Schedule cron jobs, intervals, or one-shot tasks (e.g., `"Run a system scan every night at midnight"`).
 - **Multi-Channel Push**: ARIA can push the results of her autonomous tasks to you via Slack, Telegram, WhatsApp, Email, or Discord.
@@ -69,6 +74,7 @@ graph TD
     TR --> S[System Info & Shell]
     TR --> C[Coding Sandbox]
     TR --> T[Task Scheduler]
+    TR --> A[Android Agent]
 ```
 
 ---
