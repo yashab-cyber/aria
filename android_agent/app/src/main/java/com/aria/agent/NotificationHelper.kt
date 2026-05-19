@@ -28,7 +28,7 @@ object NotificationHelper {
     }
 
     fun buildNotification(context: Context, status: String): Notification {
-        val intent = Intent(context, SettingsActivity::class.java).apply {
+        val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
         val pendingIntent = PendingIntent.getActivity(

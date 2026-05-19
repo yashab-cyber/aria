@@ -84,7 +84,7 @@ class SystemExecutor(private val service: AriaAccessibilityService) {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .build()
             
-        // Might need POST_NOTIFICATIONS on API 33+ but service already requests it via SettingsActivity
+        // Might need POST_NOTIFICATIONS on API 33+ but service already requests it via MainActivity
         try {
             NotificationManagerCompat.from(service).notify(System.currentTimeMillis().toInt(), notification)
         } catch (e: SecurityException) {

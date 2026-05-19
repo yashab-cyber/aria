@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">ARIA Agent</string>
-    <string name="accessibility_description">This service allows the ARIA AI to securely control this device remotely.</string>
-    <string name="channel_name">ARIA Agent Service</string>
-    <string name="channel_description">Keeps ARIA Agent running in background</string>
-    <string name="notification_title">ARIA Agent</string>
-    <string name="notification_connected">Connected to ARIA server</string>
-    <string name="notification_disconnected">Disconnected – reconnecting...</string>
-    <string name="notification_connecting">Connecting to ARIA server...</string>
+    <string name="app_name">A.R.I.A. Agent</string>
+    <string name="accessibility_description">ARIA God-Level Control Service. Required for autonomous device operation.</string>
+    <string name="channel_name">ARIA Service</string>
+    <string name="channel_description">Persistent connection to ARIA backend</string>
+    <string name="notification_title">ARIA Agent Active</string>
+    
+    <string name="hint_server_url">ws://192.168.1.5:8000/ws/device</string>
+    <string name="hint_auth_token">Optional Auth Token</string>
+    <string name="hint_device_name">Device Name</string>
+    <string name="hint_chat">Talk to A.R.I.A...</string>
 </resources>
