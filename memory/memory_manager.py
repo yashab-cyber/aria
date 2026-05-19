@@ -112,6 +112,12 @@ class MemoryManager:
             f"({len(messages)} msgs, importance={importance:.2f})[/green]"
         )
 
+        # 4.5. Auto-extract explicit facts into the Knowledge Base
+        try:
+            await self.knowledge.extract_and_store_facts(messages)
+        except Exception as e:
+            console.print(f"[dim red]Fact extraction error: {e}[/dim red]")
+
         # 5. Check for workflow learning opportunities
         tool_calls = snapshot.get("tool_calls", [])
         if len(tool_calls) >= self.WORKFLOW_LEARN_MIN_STEPS:

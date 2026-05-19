@@ -22,4 +22,42 @@ class KnowledgeBase:
             return f"Found knowledge:\n{found_facts}"
         return "No relevant knowledge found."
 
+    async def extract_and_store_facts(self, messages: list):
+        """
+        Uses the LLM to extract persistent facts from the session and stores them.
+        """
+        if not messages:
+            return
+
+        transcript_lines = []
+        for msg in messages[-30:]:  # Last 30 messages
+            role = msg.get("role", "unknown").upper()
+            content = msg.get("content", "")[:300]
+            transcript_lines.append(f"{role}: {content}")
+        
+        transcript = "\n".join(transcript_lines)
+        
+        prompt = f"""Analyze this conversation and extract any persistent facts, user preferences, or important details about the user (e.g., name, relationships, likes/dislikes, personal info) that an AI assistant should remember for future sessions.
+Only extract clear, explicit facts. If there are none, return nothing.
+Format each fact on a new line starting with a dash (-).
+
+Conversation:
+{transcript}
+
+Facts:"""
+
+        try:
+            from core.llm_engine import llm
+            response = ""
+            async for chunk in llm.chat_stream([{"role": "user", "content": prompt}]):
+                response += chunk
+            
+            facts = [line.strip("- ").strip() for line in response.split("\n") if line.strip().startswith("-")]
+            for fact in facts:
+                if fact and len(fact) > 5:
+                    print(f"[KnowledgeBase] Auto-extracted fact: {fact}")
+                    await self.remember_fact(fact, category="auto_extracted")
+        except Exception as e:
+            print(f"[KnowledgeBase] Fact extraction failed: {e}")
+
 kb = KnowledgeBase()

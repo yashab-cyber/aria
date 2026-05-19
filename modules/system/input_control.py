@@ -212,9 +212,17 @@ class InputControl:
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL
             )
+            await asyncio.sleep(2.0)  # Give the app time to open before the next step
             return f"Launched: {app_name}"
         except Exception as e:
             return f"Launch failed: {e}"
 
+    @aria_tool(name="wait", description="Pauses execution for a specified number of seconds. Useful to wait for applications to load or UI elements to appear.")
+    async def wait(self, seconds: float = 2.0) -> str:
+        try:
+            await asyncio.sleep(seconds)
+            return f"Waited for {seconds} seconds."
+        except Exception as e:
+            return f"Wait failed: {e}"
 
 input_control = InputControl()

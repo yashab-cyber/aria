@@ -25,7 +25,8 @@ class Planner:
         """Decomposes a complex objective into a structured plan."""
         tools_info = []
         for schema in registry.get_all_schemas():
-            tools_info.append(f"- {schema['function']['name']}: {schema['function']['description']}")
+            params = json.dumps(schema['function'].get('parameters', {}))
+            tools_info.append(f"- {schema['function']['name']}: {schema['function']['description']}\n  Parameters: {params}")
             
         tools_str = "\n".join(tools_info)
         
@@ -180,7 +181,8 @@ Create a logical step-by-step plan. Ensure dependencies are correct.
         """Generate a revised plan incorporating reflection feedback."""
         tools_info = []
         for schema in registry.get_all_schemas():
-            tools_info.append(f"- {schema['function']['name']}: {schema['function']['description']}")
+            params = json.dumps(schema['function'].get('parameters', {}))
+            tools_info.append(f"- {schema['function']['name']}: {schema['function']['description']}\n  Parameters: {params}")
         tools_str = "\n".join(tools_info)
 
         prev_steps = "\n".join(
@@ -225,7 +227,8 @@ Generate a REVISED plan that addresses ALL of the feedback above. Ensure depende
         """Generate a new plan after execution failure, informed by what went wrong."""
         tools_info = []
         for schema in registry.get_all_schemas():
-            tools_info.append(f"- {schema['function']['name']}: {schema['function']['description']}")
+            params = json.dumps(schema['function'].get('parameters', {}))
+            tools_info.append(f"- {schema['function']['name']}: {schema['function']['description']}\n  Parameters: {params}")
         tools_str = "\n".join(tools_info)
 
         failed_steps = "\n".join(
