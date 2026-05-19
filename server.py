@@ -18,6 +18,7 @@ from modules.audio.audio_manager import audio_manager
 from modules.audio.voice_pack_manager import voice_pack_manager
 from modules.scheduler.scheduler_engine import scheduler
 from modules.browser.browser_agent import browser_agent
+from modules.devices.device_manager import device_manager, set_main_loop
 
 import modules.vision
 import modules.voice
@@ -261,9 +262,36 @@ async def audio_websocket_endpoint(websocket: WebSocket):
         active_audio_sockets.remove(websocket)
         print("Audio client disconnected")
 
+@app.websocket("/ws/device")
+async def device_websocket_endpoint(websocket: WebSocket):
+    """Endpoint for Android ARIA Agents to connect."""
+    await websocket.accept()
+    device_name = None
+    try:
+        # Expect register payload first
+        data = await websocket.receive_text()
+        payload = json.loads(data)
+        if payload.get("type") == "register":
+            device_name = await device_manager.register_device(websocket, payload)
+            
+        while True:
+            data = await websocket.receive_text()
+            payload = json.loads(data)
+            
+            if payload.get("type") == "pong":
+                continue
+            elif payload.get("type") == "result":
+                await device_manager.handle_response(payload)
+                
+    except WebSocketDisconnect:
+        if device_name:
+            device_manager.remove_device(device_name)
+        print(f"Device disconnected: {device_name}")
+
 # Start scheduler on server startup
 @app.on_event("startup")
 async def startup_event():
+    set_main_loop(asyncio.get_event_loop())
     await scheduler.start()
 
 # Ensure playwright closes gracefully and memory is flushed
