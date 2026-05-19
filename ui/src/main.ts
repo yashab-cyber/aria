@@ -387,7 +387,7 @@ async function loadVoices() {
     voiceListEl.innerHTML = '';
     data.voices.forEach((voice: any) => {
       const btn = document.createElement('button');
-      btn.className = `voice-item ${voice.voice_id === activeVoiceId ? 'active' : ''}`;
+      btn.className = `voice-item ${voice.id === activeVoiceId ? 'active' : ''}`;
       btn.innerHTML = `<span><i data-lucide="user"></i> ${voice.name}</span>`;
       
       btn.addEventListener('click', () => {
@@ -410,15 +410,15 @@ async function loadVoices() {
 function showVoiceDetails(voice: any) {
   voiceDetailsEl.innerHTML = `
     <h4 style="margin-bottom:1rem; font-size:1.1rem;">${voice.name}</h4>
-    <p style="margin-bottom:0.5rem;"><strong>TTS Engine:</strong> ${voice.tts_engine}</p>
+    <p style="margin-bottom:0.5rem;"><strong>TTS Engine:</strong> ${voice.engine}</p>
     <p style="margin-bottom:1.5rem;"><strong>STT Language:</strong> ${voice.stt_language}</p>
     
-    ${voice.voice_id === activeVoiceId 
+    ${voice.id === activeVoiceId 
       ? '<span class="status-indicator online" style="display:inline-block; margin-bottom:1rem;"></span> <span style="color:var(--accent-cyan);">Currently Active</span>' 
-      : `<button class="primary-btn" id="activate-voice-btn" data-id="${voice.voice_id}" style="margin-bottom:1rem;">Set as Active Voice</button>`}
+      : `<button class="primary-btn" id="activate-voice-btn" data-id="${voice.id}" style="margin-bottom:1rem;">Set as Active Voice</button>`}
     
     <div style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top:1rem;">
-      <button class="nav-btn" id="preview-voice-btn" data-id="${voice.voice_id}" title="Preview Voice">
+      <button class="nav-btn" id="preview-voice-btn" data-id="${voice.id}" title="Preview Voice">
         <i data-lucide="play-circle"></i> Preview Audio
       </button>
     </div>

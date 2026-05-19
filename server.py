@@ -1,8 +1,24 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+import json
+import asyncio
+import os
+import tempfile
+import traceback
+import dotenv
+
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, Response
+from pydantic import BaseModel
+
+from config import config
 from core.aria import orchestrator
-from modules.system.system_info import sys_monitor
 from memory.memory_manager import memory_manager
+from modules.system.system_info import sys_monitor
+from modules.audio.audio_manager import audio_manager
+from modules.audio.voice_pack_manager import voice_pack_manager
+from modules.scheduler.scheduler_engine import scheduler
+from modules.browser.browser_agent import browser_agent
+
 import modules.vision
 import modules.voice
 import modules.system.shell
@@ -11,8 +27,6 @@ import modules.coding.sandbox
 import modules.system.input_control
 import modules.scheduler
 import modules.notifications
-import json
-import asyncio
 
 app = FastAPI(title="A.R.I.A. API")
 
@@ -39,7 +53,6 @@ async def get_memory_status():
 
 @app.get("/api/memory/search")
 async def search_memory(q: str = "", limit: int = 10):
-    from memory.memory_manager import memory_manager
     # Use Episodic memory recall
     if not q:
         # Just return recent summaries if no query
@@ -52,7 +65,6 @@ async def search_memory(q: str = "", limit: int = 10):
 @app.delete("/api/memory/sessions/{session_id}")
 async def delete_memory_session(session_id: str):
     try:
-        from memory.memory_manager import memory_manager
         # Delete summary and all messages for this session
         memory_manager.episodic.store.delete_from_collection(
             "conversations", where={"session_id": session_id}
@@ -62,9 +74,6 @@ async def delete_memory_session(session_id: str):
         return {"status": "error", "message": str(e)}
 
 # ── Config / Settings Endpoints ──
-from config import config
-import dotenv
-import os
 
 @app.get("/api/config")
 async def get_config():
@@ -106,13 +115,11 @@ async def update_config(payload: dict):
     except Exception as e:
         return {"status": "error", "message": str(e)}
 
-from pydantic import BaseModel
 class ModeRequest(BaseModel):
     mode: str
 
 @app.post("/api/audio/mode")
 async def set_audio_mode(request: ModeRequest):
-    from modules.audio.audio_manager import audio_manager
     if request.mode in ["browser_audio", "raspberrypi_audio"]:
         audio_manager.set_mode(request.mode)
         return {"status": "success", "mode": audio_manager.mode}
@@ -121,7 +128,6 @@ async def set_audio_mode(request: ModeRequest):
 # Voice Pack Endpoints
 @app.get("/api/voices")
 async def get_voices():
-    from modules.audio.voice_pack_manager import voice_pack_manager
     return {"voices": voice_pack_manager.get_all_voices(), "active_id": voice_pack_manager.active_voice_id}
 
 class VoiceModeRequest(BaseModel):
@@ -129,29 +135,17 @@ class VoiceModeRequest(BaseModel):
 
 @app.post("/api/voices/active")
 async def set_active_voice(request: VoiceModeRequest):
-    from modules.audio.voice_pack_manager import voice_pack_manager
     if voice_pack_manager.set_active_voice(request.voice_id):
         return {"status": "success", "active_id": voice_pack_manager.active_voice_id}
     return {"status": "error", "message": "Voice ID not found"}
 
 @app.get("/api/voices/preview/{voice_id}")
 async def preview_voice(voice_id: str):
-    from modules.audio.voice_pack_manager import voice_pack_manager
-    from fastapi.responses import FileResponse
-    import tempfile
-    
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as temp_audio:
         temp_path = temp_audio.name
         
     try:
         await voice_pack_manager.generate_preview(voice_id, temp_path)
-        # Fastapi background tasks can be used to delete the file, but for simplicity
-        # we can just return it. Actually it's better to read it and return Response.
-        # But FileResponse handles it fine if we just leave the temp file around briefly or clean it up.
-        from fastapi import BackgroundTasks
-        from fastapi.responses import Response
-        import os
-        
         with open(temp_path, "rb") as f:
             audio_data = f.read()
             
@@ -163,12 +157,10 @@ async def preview_voice(voice_id: str):
 # Scheduler REST endpoints
 @app.get("/api/scheduler/jobs")
 async def get_scheduled_jobs():
-    from modules.scheduler.scheduler_engine import scheduler
     return {"jobs": scheduler.get_jobs_for_api()}
 
 @app.delete("/api/scheduler/jobs/{job_id}")
 async def delete_scheduled_job(job_id: str):
-    from modules.scheduler.scheduler_engine import scheduler
     result = await scheduler.cancel_scheduled_task(job_id)
     return {"result": result}
 
@@ -186,7 +178,7 @@ async def websocket_endpoint(websocket: WebSocket):
             try:
                 msg = json.loads(data)
                 user_input = msg.get("text", "")
-            except:
+            except json.JSONDecodeError:
                 user_input = data
                 
             if not user_input:
@@ -196,10 +188,15 @@ async def websocket_endpoint(websocket: WebSocket):
             async def send_event(evt):
                 await websocket.send_json(evt)
 
-            async for chunk in orchestrator.process(user_input, send_event=send_event):
-                await websocket.send_json({"type": "chunk", "content": chunk})
-                
-            await websocket.send_json({"type": "done"})
+            try:
+                async for chunk in orchestrator.process(user_input, send_event=send_event):
+                    await websocket.send_json({"type": "chunk", "content": chunk})
+            except Exception as e:
+                print(f"Orchestrator error: {e}")
+                traceback.print_exc()
+                await websocket.send_json({"type": "chunk", "content": f"\n\n**System Error:** `{str(e)}`"})
+            finally:
+                await websocket.send_json({"type": "done"})
             
     except WebSocketDisconnect:
         # Flush working memory → episodic on disconnect
@@ -208,8 +205,6 @@ async def websocket_endpoint(websocket: WebSocket):
 
 # Audio WebSocket functionality
 active_audio_sockets = []
-
-from modules.audio.audio_manager import audio_manager
 
 async def browser_audio_callback(audio_bytes: bytes):
     for ws in active_audio_sockets:
@@ -234,7 +229,6 @@ async def audio_websocket_endpoint(websocket: WebSocket):
             
             # Since the user might be using push-to-talk, one chunk might contain
             # the full recorded audio blob.
-            from modules.audio.voice_pack_manager import voice_pack_manager
             active_voice = voice_pack_manager.get_active_voice()
             stt_lang = active_voice.get("stt_language", "en-US")
             
@@ -245,19 +239,21 @@ async def audio_websocket_endpoint(websocket: WebSocket):
                 # then process it via orchestrator.
                 await websocket.send_json({"type": "transcription", "text": text})
                 
-                # Send a signal to the main chat socket that processing started?
-                # Actually, the best way is to process it here and stream text back
-                # via the audio socket or just let the main socket handle it.
                 # Let's stream it back via the main socket architecture by 
                 # creating a background task that uses the audio websocket to send the text chunks.
-                
                 async def send_event(evt):
                     await websocket.send_json(evt)
 
                 async def process_and_respond():
-                    async for chunk in orchestrator.process(text, send_event=send_event):
-                        await websocket.send_json({"type": "chunk", "content": chunk})
-                    await websocket.send_json({"type": "done"})
+                    try:
+                        async for chunk in orchestrator.process(text, send_event=send_event):
+                            await websocket.send_json({"type": "chunk", "content": chunk})
+                    except Exception as e:
+                        print(f"Orchestrator audio error: {e}")
+                        traceback.print_exc()
+                        await websocket.send_json({"type": "chunk", "content": f"\n\n**System Error:** `{str(e)}`"})
+                    finally:
+                        await websocket.send_json({"type": "done"})
                 
                 asyncio.create_task(process_and_respond())
 
@@ -265,23 +261,18 @@ async def audio_websocket_endpoint(websocket: WebSocket):
         active_audio_sockets.remove(websocket)
         print("Audio client disconnected")
 
-
-
 # Start scheduler on server startup
 @app.on_event("startup")
 async def startup_event():
-    from modules.scheduler.scheduler_engine import scheduler
     await scheduler.start()
 
 # Ensure playwright closes gracefully and memory is flushed
 @app.on_event("shutdown")
 async def shutdown_event():
     # Shut down the scheduler
-    from modules.scheduler.scheduler_engine import scheduler
     await scheduler.shutdown()
     # Flush any active memory session
     await memory_manager.end_session()
     # Consolidate old memories on shutdown
     await memory_manager.consolidate_old_memories()
-    from modules.browser.browser_agent import browser_agent
     await browser_agent.shutdown()
