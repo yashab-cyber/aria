@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
+from pydantic import Field, field_validator
 from typing import Optional
 
 class Settings(BaseSettings):
@@ -11,6 +11,21 @@ class Settings(BaseSettings):
     gemini_api_key: Optional[str] = None
     openrouter_api_key: Optional[str] = None
     api_base: Optional[str] = None
+
+    @field_validator(
+        "openai_api_key", "deepseek_api_key", "anthropic_api_key", 
+        "gemini_api_key", "openrouter_api_key",
+        mode="before"
+    )
+    @classmethod
+    def validate_api_key(cls, v: Optional[str]) -> Optional[str]:
+        if not v:
+            return v
+        if isinstance(v, str):
+            v = v.strip()
+            if " " in v:
+                raise ValueError("API key must not contain spaces.")
+        return v
 
     # Server Settings
     aria_host: str = Field(default="0.0.0.0")
