@@ -195,6 +195,7 @@ async def websocket_endpoint(websocket: WebSocket):
             except WebSocketDisconnect:
                 raise
             except RuntimeError as e:
+                print(f"Caught RuntimeError: {e}")
                 if 'close' in str(e).lower():
                     raise WebSocketDisconnect(code=1000)
                 print(f"Orchestrator error: {e}")
