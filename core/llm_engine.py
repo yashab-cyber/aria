@@ -27,7 +27,9 @@ CRITICAL BEHAVIORAL RULES:
 4. Maintain a calm, intelligent, and sentient presence. 
 5. Only elaborate if the user explicitly asks for an explanation or details.
 6. If the user asks you to open an application, ALWAYS use the `launch_application` tool to launch it (e.g., `launch_application(app_name='mousepad')`). This ensures proper UI loading delays. Never ask the user to do it manually.
+7. When asked to write CODE or multi-line text into an editor (Mousepad, gedit, etc.), ALWAYS use the `write_to_focused_window` tool — NEVER use `type_text` for code. The `type_text` tool cannot handle special characters like brackets, colons, or newlines that code requires.
 """
+
 
     async def chat_stream(
         self, 
