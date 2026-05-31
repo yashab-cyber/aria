@@ -12,6 +12,7 @@ from config import config
 from PIL import Image, ImageDraw, ImageFont
 import litellm
 from litellm import acompletion
+from core.state import state_manager
 import aiohttp
 
 
@@ -97,6 +98,7 @@ class VisionAgent:
         description="Captures the full screen and uses Vision AI to describe, analyze, or answer questions about what is currently visible.",
     )
     async def analyze_screen(self, prompt: str = "What is on my screen?") -> str:
+        await state_manager.set_state("analyzing")
         try:
             screenshot = self._capture_screen()
             img_b64 = self._pil_to_base64(screenshot)
@@ -104,6 +106,8 @@ class VisionAgent:
             return await self._ask_vision(prompt, [img_b64], max_tokens=600)
         except Exception as e:
             return f"Error analyzing screen: {e}"
+        finally:
+            await state_manager.set_state("idle")
 
     # ──────────────────────────────────────────────────
     #  Tool 2 — Region Capture & Analysis

@@ -527,4 +527,408 @@ function renderMemories(results: any[]) {
   createIcons({ icons, nameAttr: 'data-lucide' });
 }
 
+// --- Screen Analyzer Frontend Logic ---
+let analyzerSocket: WebSocket | null = null;
+let isMonitoringScreen = false;
+
+const navAnalyzerBtn = document.getElementById('nav-analyzer') as HTMLButtonElement;
+const analyzerPane = document.getElementById('analyzer-pane')!;
+const btnCaptureNow = document.getElementById('btn-capture-now') as HTMLButtonElement;
+const btnToggleMonitor = document.getElementById('btn-toggle-monitor') as HTMLButtonElement;
+const selectInterval = document.getElementById('analyzer-interval') as HTMLSelectElement;
+const imgScreenshot = document.getElementById('analyzer-screenshot') as HTMLImageElement;
+const screenshotPlaceholder = document.getElementById('screenshot-placeholder-text')!;
+const suggestionsBox = document.getElementById('analyzer-suggestions')!;
+const queryInput = document.getElementById('analyzer-query-input') as HTMLInputElement;
+const btnSendQuery = document.getElementById('btn-send-query') as HTMLButtonElement;
+const statusDot = document.getElementById('analyzer-status-dot')!;
+const statusText = document.getElementById('analyzer-status-text')!;
+
+function connectAnalyzerWebSocket() {
+  if (analyzerSocket && (analyzerSocket.readyState === WebSocket.OPEN || analyzerSocket.readyState === WebSocket.CONNECTING)) {
+    return;
+  }
+  
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const host = window.location.host;
+  
+  analyzerSocket = new WebSocket(`${protocol}//${host}/ws/screen_analyzer`);
+  
+  analyzerSocket.onopen = () => {
+    statusDot.className = 'status-dot';
+    statusText.textContent = 'STANDBY';
+  };
+  
+  analyzerSocket.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    
+    if (data.type === 'analyzing_start') {
+      statusDot.className = 'status-dot analyzing';
+      statusText.textContent = 'ANALYZING...';
+      
+      // Update preview if image is provided
+      if (data.image) {
+        imgScreenshot.src = `data:image/jpeg;base64,${data.image}`;
+        imgScreenshot.classList.remove('placeholder');
+        screenshotPlaceholder.classList.add('hidden');
+      }
+      
+      suggestionsBox.innerHTML = `
+        <div class="loading-indicator">
+          <i data-lucide="loader" class="animate-spin" style="animation: spin 1s linear infinite;"></i>
+          <span>A.R.I.A. is studying the screen...</span>
+        </div>
+      `;
+      createIcons({ icons, nameAttr: 'data-lucide' });
+    }
+    else if (data.type === 'update') {
+      statusDot.className = isMonitoringScreen ? 'status-dot active' : 'status-dot';
+      statusText.textContent = isMonitoringScreen ? 'MONITORING' : 'STANDBY';
+      
+      // Render markdown
+      suggestionsBox.innerHTML = marked.parse(data.analysis) as string;
+      
+      // Update screenshot
+      imgScreenshot.src = `data:image/jpeg;base64,${data.image}`;
+      imgScreenshot.classList.remove('placeholder');
+      screenshotPlaceholder.classList.add('hidden');
+    }
+    else if (data.type === 'image_only') {
+      imgScreenshot.src = `data:image/jpeg;base64,${data.image}`;
+      imgScreenshot.classList.remove('placeholder');
+      screenshotPlaceholder.classList.add('hidden');
+    }
+    else if (data.type === 'status') {
+      isMonitoringScreen = data.monitoring;
+      
+      if (isMonitoringScreen) {
+        btnToggleMonitor.classList.add('active');
+        btnToggleMonitor.innerHTML = `<i data-lucide="square"></i> Stop Monitor`;
+        statusDot.className = 'status-dot active';
+        statusText.textContent = 'MONITORING';
+      } else {
+        btnToggleMonitor.classList.remove('active');
+        btnToggleMonitor.innerHTML = `<i data-lucide="play"></i> Enable Monitor`;
+        statusDot.className = 'status-dot';
+        statusText.textContent = 'STANDBY';
+      }
+      createIcons({ icons, nameAttr: 'data-lucide' });
+    }
+    else if (data.type === 'error') {
+      statusDot.className = 'status-dot';
+      statusText.textContent = 'ERROR';
+      suggestionsBox.innerHTML = `<p style="color:var(--danger)">Error: ${data.message}</p>`;
+    }
+  };
+  
+  analyzerSocket.onclose = () => {
+    statusDot.className = 'status-dot';
+    statusText.textContent = 'OFFLINE';
+    isMonitoringScreen = false;
+    btnToggleMonitor.classList.remove('active');
+    btnToggleMonitor.innerHTML = `<i data-lucide="play"></i> Enable Monitor`;
+    createIcons({ icons, nameAttr: 'data-lucide' });
+    setTimeout(connectAnalyzerWebSocket, 5000);
+  };
+}
+
+// Sidebar toggle handler
+navAnalyzerBtn.addEventListener('click', () => {
+  const isHidden = analyzerPane.classList.toggle('hidden');
+  navAnalyzerBtn.classList.toggle('active', !isHidden);
+  
+  if (!isHidden) {
+    connectAnalyzerWebSocket();
+  }
+});
+
+btnCaptureNow.addEventListener('click', () => {
+  if (analyzerSocket && analyzerSocket.readyState === WebSocket.OPEN) {
+    analyzerSocket.send(JSON.stringify({ action: 'capture' }));
+  }
+});
+
+btnToggleMonitor.addEventListener('click', () => {
+  if (!analyzerSocket || analyzerSocket.readyState !== WebSocket.OPEN) return;
+  
+  if (isMonitoringScreen) {
+    analyzerSocket.send(JSON.stringify({ action: 'stop' }));
+  } else {
+    const interval = parseInt(selectInterval.value) || 5;
+    analyzerSocket.send(JSON.stringify({ action: 'start', interval }));
+  }
+});
+
+function sendAnalyzerQuery() {
+  const text = queryInput.value.trim();
+  if (!text || !analyzerSocket || analyzerSocket.readyState !== WebSocket.OPEN) return;
+  
+  analyzerSocket.send(JSON.stringify({ action: 'query', prompt: text }));
+  queryInput.value = '';
+}
+
+btnSendQuery.addEventListener('click', sendAnalyzerQuery);
+queryInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    sendAnalyzerQuery();
+  }
+});
+
+// --- Web Avatar Canvas Rendering Loop ---
+const avatarCanvas = document.getElementById('web-avatar') as HTMLCanvasElement;
+if (avatarCanvas) {
+  const ctx = avatarCanvas.getContext('2d')!;
+  
+  let currentAvatarState = 'idle';
+  let targetColor = { r: 0, g: 240, b: 255 }; // Cyan for idle
+  let currentColor = { r: 0, g: 240, b: 255 };
+  
+  let scaleTarget = 1.0;
+  let scaleCurrent = 1.0;
+  
+  let rotSpeedInner = 0.01;
+  let rotSpeedMid = -0.012;
+  let rotSpeedOuter = 0.006;
+  
+  let rotAngleInner = 0;
+  let rotAngleMid = 0;
+  let rotAngleOuter = 0;
+  
+  let talkWaveAmp = 0;
+  
+  // Particles
+  interface Particle {
+    angle: number;
+    speed: number;
+    radius: number;
+    size: number;
+    alpha: number;
+  }
+  
+  const particles: Particle[] = [];
+  for (let i = 0; i < 12; i++) {
+    particles.push({
+      angle: Math.random() * Math.PI * 2,
+      speed: (0.005 + Math.random() * 0.015) * (Math.random() > 0.5 ? 1 : -1),
+      radius: 50 + Math.random() * 25,
+      size: 1.2 + Math.random() * 1.8,
+      alpha: 0.3 + Math.random() * 0.7
+    });
+  }
+  
+  // Set target properties based on state
+  function updateAvatarState(state: string) {
+    currentAvatarState = state;
+    
+    // Apply styling filter to canvas for matching neon glow
+    const filterColorStr = state === 'idle' ? 'rgba(0, 240, 255, 0.15)' :
+                           state === 'thinking' ? 'rgba(255, 215, 0, 0.15)' :
+                           state === 'analyzing' ? 'rgba(255, 0, 235, 0.15)' :
+                           'rgba(0, 230, 118, 0.15)';
+    avatarCanvas.style.filter = `drop-shadow(0 0 12px ${filterColorStr})`;
+    
+    switch(state) {
+      case 'idle':
+        targetColor = { r: 0, g: 240, b: 255 }; // Cyan
+        rotSpeedInner = 0.01;
+        rotSpeedMid = -0.012;
+        rotSpeedOuter = 0.006;
+        scaleTarget = 1.0;
+        break;
+      case 'thinking':
+        targetColor = { r: 255, g: 215, b: 0 }; // Golden Yellow
+        rotSpeedInner = 0.04;
+        rotSpeedMid = -0.05;
+        rotSpeedOuter = 0.03;
+        scaleTarget = 1.1;
+        break;
+      case 'analyzing':
+        targetColor = { r: 255, g: 0, b: 235 }; // Magenta/Purple
+        rotSpeedInner = 0.08;
+        rotSpeedMid = -0.09;
+        rotSpeedOuter = 0.06;
+        scaleTarget = 1.2;
+        break;
+      case 'speaking':
+        targetColor = { r: 0, g: 230, b: 118 }; // Green
+        rotSpeedInner = 0.02;
+        rotSpeedMid = -0.024;
+        rotSpeedOuter = 0.016;
+        scaleTarget = 1.05;
+        break;
+    }
+  }
+  
+  // Connect to state websocket
+  function connectAvatarWS() {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;
+    const socket = new WebSocket(`${protocol}//${host}/ws/avatar`);
+    
+    socket.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      if (data.type === 'state_change') {
+        updateAvatarState(data.state);
+        // Also update small header core state
+        const headerCore = document.getElementById('ai-core');
+        if (headerCore) {
+          headerCore.className = `ai-core ${data.state}`;
+        }
+      }
+    };
+    
+    socket.onclose = () => {
+      setTimeout(connectAvatarWS, 5000);
+    };
+  }
+  
+  connectAvatarWS();
+  
+  // Main draw loop
+  let lastTime = 0;
+  function draw(timestamp: number) {
+    if (!lastTime) lastTime = timestamp;
+    const dt = (timestamp - lastTime) / 16.666; // Normalized to ~60fps
+    lastTime = timestamp;
+    
+    // Lerp color
+    currentColor.r += (targetColor.r - currentColor.r) * 0.1 * dt;
+    currentColor.g += (targetColor.g - currentColor.g) * 0.1 * dt;
+    currentColor.b += (targetColor.b - currentColor.b) * 0.1 * dt;
+    
+    // Lerp scale
+    scaleCurrent += (scaleTarget - scaleCurrent) * 0.1 * dt;
+    
+    // Update rotation angles
+    rotAngleInner += rotSpeedInner * dt;
+    rotAngleMid += rotSpeedMid * dt;
+    rotAngleOuter += rotSpeedOuter * dt;
+    
+    // Lerp talk wave amplitude
+    if (currentAvatarState === 'speaking') {
+      talkWaveAmp += (1.0 - talkWaveAmp) * 0.2 * dt;
+    } else {
+      talkWaveAmp += (0.0 - talkWaveAmp) * 0.1 * dt;
+    }
+    
+    // Update particles
+    particles.forEach(p => {
+      let speedMult = 1.0;
+      if (currentAvatarState === 'thinking') speedMult = 2.5;
+      else if (currentAvatarState === 'analyzing') speedMult = 4.0;
+      p.angle += p.speed * speedMult * dt;
+    });
+    
+    // Clear canvas
+    ctx.clearRect(0, 0, avatarCanvas.width, avatarCanvas.height);
+    
+    const center = { x: avatarCanvas.width / 2, y: avatarCanvas.height / 2 };
+    const baseRadius = 42 * scaleCurrent;
+    const colorStr = `rgb(${Math.round(currentColor.r)}, ${Math.round(currentColor.g)}, ${Math.round(currentColor.b)})`;
+    const colorAlpha = (a: number) => `rgba(${Math.round(currentColor.r)}, ${Math.round(currentColor.g)}, ${Math.round(currentColor.b)}, ${a})`;
+    
+    // Background glow circles
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, baseRadius + 24, 0, Math.PI * 2);
+    ctx.fillStyle = colorAlpha(0.02);
+    ctx.fill();
+    
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, baseRadius + 12, 0, Math.PI * 2);
+    ctx.fillStyle = colorAlpha(0.05);
+    ctx.fill();
+    
+    // Core circle (pulsing)
+    const pulse = Math.sin(timestamp * (currentAvatarState === 'thinking' ? 0.012 : 0.004)) * 2.5;
+    let coreRadius = baseRadius * 0.45 + pulse;
+    if (currentAvatarState === 'speaking') {
+      coreRadius = baseRadius * 0.45 + Math.sin(timestamp * 0.035) * 6 * talkWaveAmp;
+    }
+    
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, Math.max(2, coreRadius), 0, Math.PI * 2);
+    ctx.fillStyle = colorStr;
+    ctx.shadowBlur = 12;
+    ctx.shadowColor = colorStr;
+    ctx.fill();
+    ctx.shadowBlur = 0; // reset
+    
+    // Bright white center core
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, Math.max(1, coreRadius * 0.5), 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+    
+    // Middle segmented ring
+    const midRadius = baseRadius * 0.8;
+    const segmentCount = 8;
+    const segmentAngle = (Math.PI * 2) / segmentCount;
+    const gapRatio = 0.4;
+    
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = colorAlpha(0.65);
+    for (let i = 0; i < segmentCount; i++) {
+      const startAngle = i * segmentAngle + rotAngleMid;
+      const endAngle = startAngle + segmentAngle * (1 - gapRatio);
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, midRadius, startAngle, endAngle);
+      ctx.stroke();
+    }
+    
+    // Outer ring (dots or analyzing scanner/frame)
+    const outerRadius = baseRadius * 1.25;
+    if (currentAvatarState === 'analyzing') {
+      // Horizontal laser bar
+      const scanY = center.y + Math.sin(timestamp * 0.006) * baseRadius;
+      ctx.beginPath();
+      ctx.moveTo(center.x - baseRadius, scanY);
+      ctx.lineTo(center.x + baseRadius, scanY);
+      ctx.strokeStyle = colorStr;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      
+      // Fine bright subline
+      ctx.beginPath();
+      ctx.moveTo(center.x - baseRadius * 0.8, scanY - 1.5);
+      ctx.lineTo(center.x + baseRadius * 0.8, scanY - 1.5);
+      ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+      
+      // Target box
+      const targetSize = baseRadius * 1.3;
+      ctx.strokeStyle = colorAlpha(0.4);
+      ctx.lineWidth = 0.8;
+      ctx.strokeRect(center.x - targetSize, center.y - targetSize, targetSize * 2, targetSize * 2);
+    } else {
+      // Dotted outer ring
+      const dotCount = 18;
+      ctx.fillStyle = colorAlpha(0.7);
+      for (let i = 0; i < dotCount; i++) {
+        const a = i * ((Math.PI * 2) / dotCount) + rotAngleOuter;
+        const x = center.x + Math.cos(a) * outerRadius;
+        const y = center.y + Math.sin(a) * outerRadius;
+        ctx.beginPath();
+        ctx.arc(x, y, 1.0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    
+    // Orbit particles
+    particles.forEach(p => {
+      const rad = p.radius * scaleCurrent;
+      const x = center.x + Math.cos(p.angle) * rad;
+      const y = center.y + Math.sin(p.angle) * rad;
+      ctx.fillStyle = colorAlpha(p.alpha);
+      ctx.beginPath();
+      ctx.arc(x, y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    
+    requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
+}
+
 connectWebSocket();

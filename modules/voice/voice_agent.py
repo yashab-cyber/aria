@@ -2,6 +2,7 @@ import os
 import asyncio
 from core.tool_registry import aria_tool
 from config import config
+from core.state import state_manager
 
 class VoiceAgent:
     def __init__(self):
@@ -18,6 +19,7 @@ class VoiceAgent:
 
     @aria_tool(name="speak", description="Synthesizes text into spoken audio.")
     async def speak(self, text: str) -> str:
+        await state_manager.set_state("speaking")
         try:
             from modules.audio.audio_manager import audio_manager
             from modules.audio.voice_pack_manager import voice_pack_manager
@@ -46,6 +48,8 @@ class VoiceAgent:
                 
         except Exception as e:
             return f"Error speaking: {str(e)}"
+        finally:
+            await state_manager.set_state("idle")
 
     @aria_tool(name="listen", description="Activates microphone, listens to the user for a single phrase, and transcribes audio to text.")
     async def listen(self, language: str = "en-US") -> str:

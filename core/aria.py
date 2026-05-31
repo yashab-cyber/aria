@@ -5,6 +5,7 @@ from core.planner import planner
 from memory.memory_manager import memory_manager
 from modules.vision.vision_agent import vision_agent
 from modules.voice.voice_agent import voice_agent
+from core.state import state_manager
 
 class AriaOrchestrator:
     def __init__(self):
@@ -13,6 +14,7 @@ class AriaOrchestrator:
         
     async def process(self, user_input: str, send_event=None) -> AsyncGenerator[str, None]:
         """Main entry point for processing user input."""
+        await state_manager.set_state("thinking")
         
         # 1. Recall context from all three memory tiers
         context_msg = memory_manager.get_context(user_input)
@@ -28,12 +30,15 @@ class AriaOrchestrator:
         if intent_res.intent in ["BROWSER", "SYSTEM_CONTROL", "VISION"]:
             yield "Analyzing screen context...\n"
             try:
+                await state_manager.set_state("analyzing")
                 vision_prompt = user_input if intent_res.intent == "VISION" else "Describe what is currently visible on the screen."
                 screen_analysis = await vision_agent.analyze_screen(prompt=vision_prompt)
                 visual_context = f"Current Screen Context:\n{screen_analysis}\n"
                 yield "Screen analyzed.\n\n"
             except Exception as e:
                 yield f"Vision analysis failed: {str(e)}\n\n"
+            finally:
+                await state_manager.set_state("thinking")
 
         # 5. Multi-Step Execution with Self-Reflection Loop
         plan_results = ""

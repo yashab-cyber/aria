@@ -218,6 +218,186 @@ async def websocket_endpoint(websocket: WebSocket):
         await memory_manager.end_session()
         print("Client disconnected — session committed to episodic memory")
 
+# State subscription for avatar
+from core.state import state_manager
+
+@app.websocket("/ws/avatar")
+async def websocket_avatar_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    state_manager.register(websocket)
+    try:
+        await websocket.send_json({"type": "state_change", "state": state_manager.current_state})
+        while True:
+            data = await websocket.receive_text()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        state_manager.unregister(websocket)
+
+# Screen Analyzer WS
+@app.websocket("/ws/screen_analyzer")
+async def screen_analyzer_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    
+    import pyautogui
+    from modules.vision.vision_agent import vision_agent
+    import base64
+    from PIL import Image
+    from io import BytesIO
+    import numpy as np
+    import cv2
+    
+    monitor_task = None
+    
+    async def monitor_loop(interval):
+        prev_b64 = None
+        try:
+            while True:
+                screenshot = pyautogui.screenshot()
+                
+                # Check for significant change (fast check downscaled)
+                curr_img = screenshot.resize((256, 144), Image.Resampling.LANCZOS)
+                curr_np = np.array(curr_img.convert("RGB"))
+                
+                significant_change = True
+                if prev_b64 is not None:
+                    prev_img = Image.open(BytesIO(base64.b64decode(prev_b64))).resize((256, 144), Image.Resampling.LANCZOS)
+                    prev_np = np.array(prev_img.convert("RGB"))
+                    diff = cv2.absdiff(prev_np, curr_np)
+                    gray = cv2.cvtColor(diff, cv2.COLOR_RGB2GRAY)
+                    change_pct = (np.count_nonzero(gray > 30) / gray.size) * 100
+                    if change_pct < 1.0:
+                        significant_change = False
+                
+                # Downscale preview for Web UI to render quickly
+                preview_img = screenshot.copy()
+                preview_img.thumbnail((960, 540), Image.Resampling.LANCZOS)
+                preview_buffered = BytesIO()
+                preview_img.save(preview_buffered, format="JPEG", quality=80)
+                preview_b64 = base64.b64encode(preview_buffered.getvalue()).decode("utf-8")
+                
+                if significant_change:
+                    await state_manager.set_state("analyzing")
+                    await websocket.send_json({"type": "analyzing_start", "image": preview_b64})
+                    
+                    prompt = (
+                        "Look at this screenshot of the user's screen. They are working on a task. "
+                        "List 1-3 extremely concise, actionable J.A.R.V.I.S.-style tips, commands, or next steps to help them do their work. "
+                        "Format your response as clean markdown. Keep it very short (less than 100 words in total). "
+                        "If the screen is mostly empty or idle, just say 'System is idle. Awaiting user activity.' and nothing else."
+                    )
+                    
+                    full_buffered = BytesIO()
+                    screenshot.save(full_buffered, format="PNG")
+                    full_b64 = base64.b64encode(full_buffered.getvalue()).decode("utf-8")
+                    
+                    analysis = await vision_agent._ask_vision(prompt, [full_b64], max_tokens=300)
+                    prev_b64 = full_b64
+                    
+                    await state_manager.set_state("idle")
+                    await websocket.send_json({
+                        "type": "update",
+                        "image": preview_b64,
+                        "analysis": analysis
+                    })
+                else:
+                    await websocket.send_json({
+                        "type": "image_only",
+                        "image": preview_b64
+                    })
+                    
+                await asyncio.sleep(interval)
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            print(f"Error in screen monitor loop: {e}")
+            try:
+                await websocket.send_json({"type": "error", "message": str(e)})
+            except Exception:
+                pass
+            finally:
+                await state_manager.set_state("idle")
+                
+    try:
+        while True:
+            data = await websocket.receive_text()
+            msg = json.loads(data)
+            action = msg.get("action")
+            
+            if action == "start":
+                interval = int(msg.get("interval", 5))
+                if monitor_task:
+                    monitor_task.cancel()
+                monitor_task = asyncio.create_task(monitor_loop(interval))
+                await websocket.send_json({"type": "status", "monitoring": True, "interval": interval})
+                
+            elif action == "stop":
+                if monitor_task:
+                    monitor_task.cancel()
+                    monitor_task = None
+                await websocket.send_json({"type": "status", "monitoring": False})
+                
+            elif action == "capture":
+                await state_manager.set_state("analyzing")
+                await websocket.send_json({"type": "analyzing_start"})
+                
+                screenshot = pyautogui.screenshot()
+                
+                preview_img = screenshot.copy()
+                preview_img.thumbnail((960, 540), Image.Resampling.LANCZOS)
+                preview_buffered = BytesIO()
+                preview_img.save(preview_buffered, format="JPEG", quality=80)
+                preview_b64 = base64.b64encode(preview_buffered.getvalue()).decode("utf-8")
+                
+                full_buffered = BytesIO()
+                screenshot.save(full_buffered, format="PNG")
+                full_b64 = base64.b64encode(full_buffered.getvalue()).decode("utf-8")
+                
+                prompt = (
+                    "Look at this screenshot of the user's screen. They are working on a task. "
+                    "List 1-3 extremely concise, actionable J.A.R.V.I.S.-style tips, commands, or next steps to help them do their work. "
+                    "Format your response as clean markdown. Keep it very short."
+                )
+                
+                analysis = await vision_agent._ask_vision(prompt, [full_b64], max_tokens=300)
+                await state_manager.set_state("idle")
+                await websocket.send_json({
+                    "type": "update",
+                    "image": preview_b64,
+                    "analysis": analysis
+                })
+                
+            elif action == "query":
+                user_prompt = msg.get("prompt", "What is on my screen?")
+                await state_manager.set_state("analyzing")
+                await websocket.send_json({"type": "analyzing_start"})
+                
+                screenshot = pyautogui.screenshot()
+                
+                preview_img = screenshot.copy()
+                preview_img.thumbnail((960, 540), Image.Resampling.LANCZOS)
+                preview_buffered = BytesIO()
+                preview_img.save(preview_buffered, format="JPEG", quality=80)
+                preview_b64 = base64.b64encode(preview_buffered.getvalue()).decode("utf-8")
+                
+                full_buffered = BytesIO()
+                screenshot.save(full_buffered, format="PNG")
+                full_b64 = base64.b64encode(full_buffered.getvalue()).decode("utf-8")
+                
+                analysis = await vision_agent._ask_vision(user_prompt, [full_b64], max_tokens=500)
+                await state_manager.set_state("idle")
+                await websocket.send_json({
+                    "type": "update",
+                    "image": preview_b64,
+                    "analysis": analysis
+                })
+                
+    except WebSocketDisconnect:
+        pass
+    finally:
+        if monitor_task:
+            monitor_task.cancel()
+
 # Audio WebSocket functionality
 active_audio_sockets = []
 

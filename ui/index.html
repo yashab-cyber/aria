@@ -33,8 +33,13 @@
           <h1>A.R.I.A. <span class="status-indicator online"></span></h1>
         </div>
 
+        <div class="sidebar-avatar-container">
+          <canvas id="web-avatar" width="180" height="180"></canvas>
+        </div>
+
         <nav class="nav-links">
           <button class="nav-btn active" id="nav-chat"><i data-lucide="message-square"></i> Chat Interface</button>
+          <button class="nav-btn" id="nav-analyzer"><i data-lucide="scan-eye"></i> Screen Analyzer</button>
           <button class="nav-btn" id="nav-memory"><i data-lucide="database"></i> Memory Browser</button>
           <button class="nav-btn" id="voice-config-btn"><i data-lucide="mic-2"></i> Voice Settings</button>
           <button class="nav-btn" id="nav-settings"><i data-lucide="settings"></i> System Settings</button>
@@ -69,8 +74,67 @@
             <button id="send-btn" title="Send"><i data-lucide="arrow-up"></i></button>
           </div>
           <div class="input-footer">A.R.I.A. can execute code, automate your browser, and manage your system.</div>
-        </div>
       </main>
+
+      <!-- Screen Analyzer Pane -->
+      <section id="analyzer-pane" class="analyzer-pane hidden">
+        <div class="analyzer-header">
+          <div class="analyzer-title">
+            <i data-lucide="scan-eye"></i>
+            <h2>Screen Analyzer</h2>
+          </div>
+          <div class="analyzer-status">
+            <span class="status-dot" id="analyzer-status-dot"></span>
+            <span id="analyzer-status-text">OFFLINE</span>
+          </div>
+        </div>
+
+        <div class="analyzer-content">
+          <!-- Live View / Preview -->
+          <div class="preview-panel">
+            <div class="preview-header">
+              <span><i data-lucide="image"></i> Live View</span>
+              <button id="btn-capture-now" class="icon-btn-text" title="Capture Screen"><i data-lucide="camera"></i> Capture</button>
+            </div>
+            <div class="preview-box">
+              <img id="analyzer-screenshot" src="" alt="No screen captured yet" class="screenshot-img placeholder" />
+              <div id="screenshot-placeholder-text">Click "Capture" or enable "Monitor" to load screen</div>
+            </div>
+          </div>
+
+          <!-- Controls -->
+          <div class="analyzer-controls">
+            <button id="btn-toggle-monitor" class="secondary-btn">
+              <i data-lucide="play"></i> Enable Monitor
+            </button>
+            <div class="interval-selector">
+              <label for="analyzer-interval">Interval: </label>
+              <select id="analyzer-interval">
+                <option value="3">3s</option>
+                <option value="5" selected>5s</option>
+                <option value="10">10s</option>
+                <option value="30">30s</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Recommendations -->
+          <div class="recommendations-panel">
+            <h3><i data-lucide="sparkles"></i> AI Assistant Tasks & Suggestions</h3>
+            <div id="analyzer-suggestions" class="suggestions-content-box">
+              <p class="empty-msg">No suggestions yet. Captured screen will be analyzed here.</p>
+            </div>
+          </div>
+
+          <!-- Direct Screen Query -->
+          <div class="analyzer-query-box">
+            <div class="query-input-container">
+              <input type="text" id="analyzer-query-input" placeholder="Ask about this screen..." />
+              <button id="btn-send-query" title="Query"><i data-lucide="arrow-up"></i></button>
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
     
     <!-- Voice Config Modal -->
