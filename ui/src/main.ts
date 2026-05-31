@@ -824,87 +824,188 @@ if (avatarCanvas) {
     ctx.clearRect(0, 0, avatarCanvas.width, avatarCanvas.height);
     
     const center = { x: avatarCanvas.width / 2, y: avatarCanvas.height / 2 };
-    const baseRadius = 42 * scaleCurrent;
+    const baseRadius = 56 * scaleCurrent; // Scaled for better detail
     const colorStr = `rgb(${Math.round(currentColor.r)}, ${Math.round(currentColor.g)}, ${Math.round(currentColor.b)})`;
     const colorAlpha = (a: number) => `rgba(${Math.round(currentColor.r)}, ${Math.round(currentColor.g)}, ${Math.round(currentColor.b)}, ${a})`;
+    const timeSec = timestamp / 1000.0;
     
     // Background glow circles
     ctx.beginPath();
-    ctx.arc(center.x, center.y, baseRadius + 24, 0, Math.PI * 2);
-    ctx.fillStyle = colorAlpha(0.02);
+    ctx.arc(center.x, center.y, baseRadius + 30, 0, Math.PI * 2);
+    ctx.fillStyle = colorAlpha(0.015);
     ctx.fill();
     
     ctx.beginPath();
-    ctx.arc(center.x, center.y, baseRadius + 12, 0, Math.PI * 2);
-    ctx.fillStyle = colorAlpha(0.05);
+    ctx.arc(center.x, center.y, baseRadius + 15, 0, Math.PI * 2);
+    ctx.fillStyle = colorAlpha(0.04);
     ctx.fill();
     
-    // Core circle (pulsing)
-    const pulse = Math.sin(timestamp * (currentAvatarState === 'thinking' ? 0.012 : 0.004)) * 2.5;
-    let coreRadius = baseRadius * 0.45 + pulse;
+    // 1. Outer Technical Ticks (Compass-like ticks)
+    const tickCount = 36;
+    const tickLength = 4.0;
+    const tickRadius = baseRadius * 1.45;
+    ctx.lineWidth = 1.0;
+    for (let i = 0; i < tickCount; i++) {
+      const angle = (i * (Math.PI * 2 / tickCount)) + rotAngleOuter * 0.5;
+      const isCardinal = i % 9 === 0;
+      const curTickLen = isCardinal ? tickLength * 2.0 : tickLength;
+      ctx.strokeStyle = isCardinal ? colorAlpha(0.8) : colorAlpha(0.3);
+      ctx.lineWidth = isCardinal ? 1.5 : 1.0;
+      
+      const startX = center.x + Math.cos(angle) * tickRadius;
+      const startY = center.y + Math.sin(angle) * tickRadius;
+      const endX = center.x + Math.cos(angle) * (tickRadius + curTickLen);
+      const endY = center.y + Math.sin(angle) * (tickRadius + curTickLen);
+      
+      ctx.beginPath();
+      ctx.moveTo(startX, startY);
+      ctx.lineTo(endX, endY);
+      ctx.stroke();
+    }
+    
+    // 2. Speaking waveform ring (glowing equalizer around core)
+    if (currentAvatarState === 'speaking' || talkWaveAmp > 0.01) {
+      const eqRadius = baseRadius * 0.7;
+      const numBars = 48;
+      const barAngle = (Math.PI * 2) / numBars;
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = colorAlpha(0.75);
+      
+      for (let i = 0; i < numBars; i++) {
+        const a = i * barAngle + rotAngleInner * 0.2;
+        // Organic voice-wave simulation
+        let waveVal = Math.sin(i * 0.45 + timeSec * 18.0) * Math.cos(i * 0.2 - timeSec * 12.0);
+        waveVal = Math.abs(waveVal) * 16.0 * talkWaveAmp + (Math.random() * 2.0 * talkWaveAmp);
+        
+        const startX = center.x + Math.cos(a) * eqRadius;
+        const startY = center.y + Math.sin(a) * eqRadius;
+        const endX = center.x + Math.cos(a) * (eqRadius + waveVal);
+        const endY = center.y + Math.sin(a) * (eqRadius + waveVal);
+        
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(endX, endY);
+        ctx.stroke();
+      }
+    }
+    
+    // 3. Thinking state dynamic gears
+    if (currentAvatarState === 'thinking') {
+      const gearRadius = baseRadius * 0.55;
+      const toothCount = 16;
+      const toothAngle = (Math.PI * 2) / toothCount;
+      ctx.lineWidth = 1.0;
+      ctx.strokeStyle = colorAlpha(0.7);
+      
+      for (let i = 0; i < toothCount; i++) {
+        const a = i * toothAngle + rotAngleInner;
+        const p1 = { x: center.x + Math.cos(a) * gearRadius, y: center.y + Math.sin(a) * gearRadius };
+        const p2 = { x: center.x + Math.cos(a + toothAngle * 0.4) * (gearRadius + 4), y: center.y + Math.sin(a + toothAngle * 0.4) * (gearRadius + 4) };
+        const p3 = { x: center.x + Math.cos(a + toothAngle * 0.6) * (gearRadius + 4), y: center.y + Math.sin(a + toothAngle * 0.6) * (gearRadius + 4) };
+        const p4 = { x: center.x + Math.cos(a + toothAngle) * gearRadius, y: center.y + Math.sin(a + toothAngle) * gearRadius };
+        
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.lineTo(p3.x, p3.y);
+        ctx.lineTo(p4.x, p4.y);
+        ctx.stroke();
+      }
+    }
+    
+    // 4. Core circle (pulsing)
+    const pulse = Math.sin(timeSec * (currentAvatarState === 'thinking' ? 10.0 : 3.0)) * 2.2;
+    let coreRadius = baseRadius * 0.38 + pulse;
     if (currentAvatarState === 'speaking') {
-      coreRadius = baseRadius * 0.45 + Math.sin(timestamp * 0.035) * 6 * talkWaveAmp;
+      coreRadius = baseRadius * 0.38 + Math.sin(timeSec * 28.0) * 6 * talkWaveAmp;
     }
     
     ctx.beginPath();
     ctx.arc(center.x, center.y, Math.max(2, coreRadius), 0, Math.PI * 2);
-    ctx.fillStyle = colorStr;
-    ctx.shadowBlur = 12;
-    ctx.shadowColor = colorStr;
+    ctx.fillStyle = colorAlpha(0.3);
     ctx.fill();
-    ctx.shadowBlur = 0; // reset
     
-    // Bright white center core
     ctx.beginPath();
-    ctx.arc(center.x, center.y, Math.max(1, coreRadius * 0.5), 0, Math.PI * 2);
+    ctx.arc(center.x, center.y, Math.max(1, coreRadius * 0.8), 0, Math.PI * 2);
+    ctx.fillStyle = colorAlpha(0.75);
+    ctx.fill();
+    
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, Math.max(1, coreRadius * 0.4), 0, Math.PI * 2);
     ctx.fillStyle = '#ffffff';
     ctx.fill();
     
-    // Middle segmented ring
-    const midRadius = baseRadius * 0.8;
+    // 5. Middle segmented ring (with double line)
+    const midRadius = baseRadius * 0.9;
     const segmentCount = 8;
     const segmentAngle = (Math.PI * 2) / segmentCount;
-    const gapRatio = 0.4;
+    const gapRatio = 0.35;
     
-    ctx.lineWidth = 1.5;
-    ctx.strokeStyle = colorAlpha(0.65);
     for (let i = 0; i < segmentCount; i++) {
       const startAngle = i * segmentAngle + rotAngleMid;
       const endAngle = startAngle + segmentAngle * (1 - gapRatio);
+      
+      ctx.lineWidth = 1.8;
+      ctx.strokeStyle = colorAlpha(0.7);
       ctx.beginPath();
       ctx.arc(center.x, center.y, midRadius, startAngle, endAngle);
       ctx.stroke();
+      
+      ctx.lineWidth = 0.8;
+      ctx.strokeStyle = colorAlpha(0.3);
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, midRadius + 3, startAngle - 0.04, endAngle + 0.04);
+      ctx.stroke();
     }
     
-    // Outer ring (dots or analyzing scanner/frame)
-    const outerRadius = baseRadius * 1.25;
+    // 6. Outer ring (dots or analyzing scanner/frame)
+    const outerRadius = baseRadius * 1.22;
     if (currentAvatarState === 'analyzing') {
       // Horizontal laser bar
-      const scanY = center.y + Math.sin(timestamp * 0.006) * baseRadius;
+      const scanY = center.y + Math.sin(timeSec * 5.0) * baseRadius;
       ctx.beginPath();
-      ctx.moveTo(center.x - baseRadius, scanY);
-      ctx.lineTo(center.x + baseRadius, scanY);
+      ctx.moveTo(center.x - baseRadius * 1.1, scanY);
+      ctx.lineTo(center.x + baseRadius * 1.1, scanY);
       ctx.strokeStyle = colorStr;
       ctx.lineWidth = 1.5;
       ctx.stroke();
       
       // Fine bright subline
       ctx.beginPath();
-      ctx.moveTo(center.x - baseRadius * 0.8, scanY - 1.5);
-      ctx.lineTo(center.x + baseRadius * 0.8, scanY - 1.5);
-      ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+      ctx.moveTo(center.x - baseRadius * 0.9, scanY - 1.8);
+      ctx.lineTo(center.x + baseRadius * 0.9, scanY - 1.8);
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
       ctx.lineWidth = 0.8;
       ctx.stroke();
       
-      // Target box
-      const targetSize = baseRadius * 1.3;
-      ctx.strokeStyle = colorAlpha(0.4);
+      // Target box corners
+      const sizeF = baseRadius * 1.25;
+      const bracketLen = 14.0;
+      ctx.strokeStyle = colorStr;
+      ctx.lineWidth = 1.8;
+      
+      // Top-Left corner
+      ctx.beginPath(); ctx.moveTo(center.x - sizeF + bracketLen, center.y - sizeF); ctx.lineTo(center.x - sizeF, center.y - sizeF); ctx.lineTo(center.x - sizeF, center.y - sizeF + bracketLen); ctx.stroke();
+      // Top-Right corner
+      ctx.beginPath(); ctx.moveTo(center.x + sizeF - bracketLen, center.y - sizeF); ctx.lineTo(center.x + sizeF, center.y - sizeF); ctx.lineTo(center.x + sizeF, center.y - sizeF + bracketLen); ctx.stroke();
+      // Bottom-Left corner
+      ctx.beginPath(); ctx.moveTo(center.x - sizeF + bracketLen, center.y + sizeF); ctx.lineTo(center.x - sizeF, center.y + sizeF); ctx.lineTo(center.x - sizeF, center.y + sizeF - bracketLen); ctx.stroke();
+      // Bottom-Right corner
+      ctx.beginPath(); ctx.moveTo(center.x + sizeF - bracketLen, center.y + sizeF); ctx.lineTo(center.x + sizeF, center.y + sizeF); ctx.lineTo(center.x + sizeF, center.y + sizeF - bracketLen); ctx.stroke();
+      
+      // Center reticle
+      ctx.strokeStyle = colorAlpha(0.6);
       ctx.lineWidth = 0.8;
-      ctx.strokeRect(center.x - targetSize, center.y - targetSize, targetSize * 2, targetSize * 2);
+      ctx.beginPath();
+      ctx.moveTo(center.x - 6, center.y); ctx.lineTo(center.x - 2, center.y);
+      ctx.moveTo(center.x + 2, center.y); ctx.lineTo(center.x + 6, center.y);
+      ctx.moveTo(center.x, center.y - 6); ctx.lineTo(center.x, center.y - 2);
+      ctx.moveTo(center.x, center.y + 2); ctx.lineTo(center.x, center.y + 6);
+      ctx.stroke();
     } else {
       // Dotted outer ring
-      const dotCount = 18;
-      ctx.fillStyle = colorAlpha(0.7);
+      const dotCount = 24;
+      ctx.fillStyle = colorAlpha(0.65);
       for (let i = 0; i < dotCount; i++) {
         const a = i * ((Math.PI * 2) / dotCount) + rotAngleOuter;
         const x = center.x + Math.cos(a) * outerRadius;
@@ -915,7 +1016,7 @@ if (avatarCanvas) {
       }
     }
     
-    // Orbit particles
+    // 7. Orbit particles
     particles.forEach(p => {
       const rad = p.radius * scaleCurrent;
       const x = center.x + Math.cos(p.angle) * rad;
@@ -925,6 +1026,12 @@ if (avatarCanvas) {
       ctx.arc(x, y, p.size, 0, Math.PI * 2);
       ctx.fill();
     });
+    
+    // 8. Futuristic Scanlines Overlay (horizontal lines)
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+    for (let y = 0; y < avatarCanvas.height; y += 4) {
+      ctx.fillRect(0, y, avatarCanvas.width, 1);
+    }
     
     requestAnimationFrame(draw);
   }

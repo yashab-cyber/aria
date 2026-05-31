@@ -153,68 +153,146 @@ func update_state_animations(delta: float) -> void:
 func _draw() -> void:
 	var screen_size = get_viewport_rect().size
 	var center = screen_size / 2.0
-	var base_radius := 60.0 * scale_current
+	var base_radius := 75.0 * scale_current
+	var time_sec = Time.get_ticks_msec() / 1000.0
 	
 	if not transparent_background:
-		# Draw solid background color
-		draw_rect(Rect2(Vector2.ZERO, screen_size), Color(0.02, 0.02, 0.05, 1.0))
+		# Draw solid background color (dark space cadet blue gradient)
+		draw_rect(Rect2(Vector2.ZERO, screen_size), Color(0.015, 0.015, 0.03, 1.0))
 		# Draw dynamic grid lines colored slightly by active state color
-		var grid_spacing := 40.0
+		var grid_spacing := 30.0
 		for x in range(0, int(screen_size.x), int(grid_spacing)):
-			draw_line(Vector2(x, 0), Vector2(x, screen_size.y), Color(color_current.r, color_current.g, color_current.b, 0.04))
+			draw_line(Vector2(x, 0), Vector2(x, screen_size.y), Color(color_current.r, color_current.g, color_current.b, 0.03))
 		for y in range(0, int(screen_size.y), int(grid_spacing)):
-			draw_line(Vector2(0, y), Vector2(screen_size.x, y), Color(color_current.r, color_current.g, color_current.b, 0.04))
+			draw_line(Vector2(0, y), Vector2(screen_size.x, y), Color(color_current.r, color_current.g, color_current.b, 0.03))
+		
+		# Draw fine futuristic boundary lines
+		draw_line(Vector2(20, 20), Vector2(screen_size.x - 20, 20), Color(color_current.r, color_current.g, color_current.b, 0.1), 1.0)
+		draw_line(Vector2(20, screen_size.y - 20), Vector2(screen_size.x - 20, screen_size.y - 20), Color(color_current.r, color_current.g, color_current.b, 0.1), 1.0)
 
-	# Draw background circle glow
+	# 1. Background glow layers
+	draw_circle(center, base_radius + 60, Color(color_current.r, color_current.g, color_current.b, 0.01))
 	draw_circle(center, base_radius + 40, Color(color_current.r, color_current.g, color_current.b, 0.03))
 	draw_circle(center, base_radius + 20, Color(color_current.r, color_current.g, color_current.b, 0.06))
 	
-	# Draw core (pulsing)
-	var time_sec = Time.get_ticks_msec() / 1000.0
-	var pulse := sin(time_sec * (8.0 if current_state == "thinking" else 3.0)) * 4.0
-	
-	if current_state == "speaking":
-		# React to simulated voice frequency
-		pulse = sin(time_sec * 25.0) * 12.0 * talk_wave_amplitude
+	# 2. Outer Technical Accents (Compass-like ticks)
+	var tick_count := 36
+	var tick_length := 6.0
+	var tick_radius = base_radius * 1.45
+	for i in range(tick_count):
+		var angle = (i * (TAU / tick_count)) + rot_angle_outer * 0.5
+		# Accentuate cardinal directions
+		var is_cardinal = i % 9 == 0
+		var current_tick_length = tick_length * 2.0 if is_cardinal else tick_length
+		var current_color = color_current if is_cardinal else Color(color_current.r, color_current.g, color_current.b, 0.4)
 		
-	var core_radius = (base_radius * 0.4) + pulse
-	draw_circle(center, core_radius, color_current)
-	draw_circle(center, core_radius * 0.6, Color(1, 1, 1, 0.8)) # bright center core
+		var start_p = center + Vector2(cos(angle), sin(angle)) * tick_radius
+		var end_p = center + Vector2(cos(angle), sin(angle)) * (tick_radius + current_tick_length)
+		draw_line(start_p, end_p, current_color, 1.5 if is_cardinal else 1.0)
+
+	# 3. Speaking waveform ring (glowing equalizer around core)
+	if current_state == "speaking" or talk_wave_amplitude > 0.01:
+		var eq_radius = base_radius * 0.7
+		var num_bars = 48
+		var bar_angle = TAU / num_bars
+		for i in range(num_bars):
+			var a = i * bar_angle + rot_angle_inner * 0.2
+			# Organic voice-wave simulation
+			var wave_val = sin(i * 0.45 + time_sec * 18.0) * cos(i * 0.2 - time_sec * 12.0)
+			wave_val = abs(wave_val) * 22.0 * talk_wave_amplitude + (randf() * 3.0 * talk_wave_amplitude)
+			
+			var start_p = center + Vector2(cos(a), sin(a)) * eq_radius
+			var end_p = center + Vector2(cos(a), sin(a)) * (eq_radius + wave_val)
+			draw_line(start_p, end_p, Color(color_current.r, color_current.g, color_current.b, 0.8), 2.0)
+
+	# 4. Thinking state dynamic gears
+	if current_state == "thinking":
+		# Inner rotating HUD gear with teeth
+		var gear_radius = base_radius * 0.55
+		var tooth_count = 16
+		var tooth_angle = TAU / tooth_count
+		for i in range(tooth_count):
+			var a = i * tooth_angle + rot_angle_inner
+			var p1 = center + Vector2(cos(a), sin(a)) * gear_radius
+			var p2 = center + Vector2(cos(a + tooth_angle * 0.4), sin(a + tooth_angle * 0.4)) * (gear_radius + 6)
+			var p3 = center + Vector2(cos(a + tooth_angle * 0.6), sin(a + tooth_angle * 0.6)) * (gear_radius + 6)
+			var p4 = center + Vector2(cos(a + tooth_angle)) * gear_radius
+			draw_line(p1, p2, color_current, 1.5)
+			draw_line(p2, p3, color_current, 1.5)
+			draw_line(p3, p4, color_current, 1.5)
+
+	# 5. Core pulsing sphere
+	var pulse := sin(time_sec * (10.0 if current_state == "thinking" else 3.0)) * 3.0
+	if current_state == "speaking":
+		pulse = sin(time_sec * 28.0) * 9.0 * talk_wave_amplitude
+		
+	var core_radius = (base_radius * 0.38) + pulse
+	# Multi-layer core gradient look
+	draw_circle(center, core_radius, Color(color_current.r, color_current.g, color_current.b, 0.3))
+	draw_circle(center, core_radius * 0.8, Color(color_current.r, color_current.g, color_current.b, 0.75))
+	draw_circle(center, core_radius * 0.4, Color(1, 1, 1, 0.95)) # Glowing hot center
 	
-	# Draw Middle Ring (dashed / segments)
-	var mid_radius = base_radius * 0.8
-	var segment_count := 12
+	# 6. Middle HUD Ring (double dashed segments)
+	var mid_radius = base_radius * 0.9
+	var segment_count := 8
 	var segment_angle := TAU / segment_count
-	var gap_ratio := 0.4 # percentage of gap
+	var gap_ratio := 0.35
 	
 	for i in range(segment_count):
 		var start_a = (i * segment_angle) + rot_angle_mid
 		var end_a = start_a + (segment_angle * (1.0 - gap_ratio))
-		draw_arc(center, mid_radius, start_a, end_a, 16, color_current, 2.0, true)
-		
-	# Draw Outer Ring (dotted or scanning lines)
-	var outer_radius = base_radius * 1.2
+		draw_arc(center, mid_radius, start_a, end_a, 24, Color(color_current.r, color_current.g, color_current.b, 0.7), 2.0, true)
+		draw_arc(center, mid_radius + 4, start_a - 0.05, end_a + 0.05, 24, Color(color_current.r, color_current.g, color_current.b, 0.3), 1.0, true)
+
+	# 7. Outer Ring HUD (with special graphics based on state)
+	var outer_radius = base_radius * 1.22
 	if current_state == "analyzing":
-		# Draw horizontal scanning bar across the face of the core
-		var scan_y = center.y + sin(time_sec * 6.0) * base_radius
-		draw_line(Vector2(center.x - base_radius, scan_y), Vector2(center.x + base_radius, scan_y), color_current, 2.0)
-		draw_line(Vector2(center.x - base_radius * 0.8, scan_y - 2), Vector2(center.x + base_radius * 0.8, scan_y - 2), Color(1, 1, 1, 0.3), 1.0)
+		# Moving laser scanning bar
+		var scan_y = center.y + sin(time_sec * 5.0) * base_radius
+		draw_line(Vector2(center.x - base_radius * 1.1, scan_y), Vector2(center.x + base_radius * 1.1, scan_y), color_current, 2.0)
+		draw_line(Vector2(center.x - base_radius * 0.9, scan_y - 2.5), Vector2(center.x + base_radius * 0.9, scan_y - 2.5), Color(1, 1, 1, 0.5), 1.0)
 		
-		# Draw square frame targets
-		var size_f = base_radius * 1.3
-		draw_rect(Rect2(center.x - size_f, center.y - size_f, size_f * 2, size_f * 2), color_current, false, 1.5)
+		# Targeting corner brackets
+		var size_f = base_radius * 1.25
+		var bracket_len = 20.0
+		# Top-Left
+		draw_line(center + Vector2(-size_f, -size_f), center + Vector2(-size_f + bracket_len, -size_f), color_current, 2.0)
+		draw_line(center + Vector2(-size_f, -size_f), center + Vector2(-size_f, -size_f + bracket_len), color_current, 2.0)
+		# Top-Right
+		draw_line(center + Vector2(size_f, -size_f), center + Vector2(size_f - bracket_len, -size_f), color_current, 2.0)
+		draw_line(center + Vector2(size_f, -size_f), center + Vector2(size_f, -size_f + bracket_len), color_current, 2.0)
+		# Bottom-Left
+		draw_line(center + Vector2(-size_f, size_f), center + Vector2(-size_f + bracket_len, size_f), color_current, 2.0)
+		draw_line(center + Vector2(-size_f, size_f), center + Vector2(-size_f, size_f - bracket_len), color_current, 2.0)
+		# Bottom-Right
+		draw_line(center + Vector2(size_f, size_f), center + Vector2(size_f - bracket_len, size_f), color_current, 2.0)
+		draw_line(center + Vector2(size_f, size_f), center + Vector2(size_f, size_f - bracket_len), color_current, 2.0)
+		
+		# Center grid line target reticle
+		draw_line(center + Vector2(-8, 0), center + Vector2(-3, 0), color_current, 1.0)
+		draw_line(center + Vector2(3, 0), center + Vector2(8, 0), color_current, 1.0)
+		draw_line(center + Vector2(0, -8), center + Vector2(0, -3), color_current, 1.0)
+		draw_line(center + Vector2(0, 3), center + Vector2(0, 8), color_current, 1.0)
 	else:
-		# Draw simple dotted outer ring
+		# Draw outer dotted interface circle
 		var dot_count := 24
 		for i in range(dot_count):
 			var a = (i * (TAU / dot_count)) + rot_angle_outer
 			var dot_pos = center + Vector2(cos(a), sin(a)) * outer_radius
-			draw_circle(dot_pos, 2.0, color_current)
-			
-	# Draw orbit particles
+			draw_circle(dot_pos, 1.8, Color(color_current.r, color_current.g, color_current.b, 0.65))
+
+	# 8. Orbiting particles (acting as floating cyber dust)
 	for p in particles:
 		var rad = p["radius"] * scale_current
 		var pos = center + Vector2(cos(p["angle"]), sin(p["angle"])) * rad
 		var col = color_current
 		col.a = p["alpha"]
 		draw_circle(pos, p["size"], col)
+		
+	# 9. Futuristic Scanlines Overlay (horizontal stripes)
+	if not transparent_background:
+		var line_y := 0.0
+		while line_y < screen_size.y:
+			draw_line(Vector2(0, line_y), Vector2(screen_size.x, line_y), Color(0.0, 0.0, 0.0, 0.06), 1.0)
+			line_y += 4.0
+
