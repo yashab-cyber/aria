@@ -22,5 +22,5 @@ litellm>=1.83.7
 pydub>=0.25.1
 edge-tts>=7.2.8
 apscheduler>=3.11.2
-aiosmtplib>=5.1.0
+aiosmtplib>=5.1.1
 pymupdf>=1.27.2.3
