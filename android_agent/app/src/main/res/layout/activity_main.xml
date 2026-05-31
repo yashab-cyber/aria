@@ -11,10 +11,12 @@
         android:id="@+id/cardSettings"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_margin="8dp"
+        android:layout_margin="12dp"
         app:cardBackgroundColor="@color/colorSurface"
-        app:cardCornerRadius="16dp"
-        app:cardElevation="4dp"
+        app:cardCornerRadius="20dp"
+        app:cardElevation="0dp"
+        app:strokeWidth="1.2dp"
+        app:strokeColor="#1F8F94B5"
         app:layout_constraintTop_toTopOf="parent">
 
         <LinearLayout
@@ -35,7 +37,7 @@
                     android:layout_weight="1"
                     android:text="A.R.I.A. UPLINK"
                     android:textColor="@color/colorAccent"
-                    android:textSize="18sp"
+                    android:textSize="16sp"
                     android:textStyle="bold"
                     android:letterSpacing="0.1" />
 
@@ -55,46 +57,84 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:visibility="gone"
-                android:layout_marginTop="12dp">
+                android:layout_marginTop="16dp">
 
-                <EditText
-                    android:id="@+id/etServerUrl"
+                <!-- Server URL -->
+                <com.google.android.material.textfield.TextInputLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="@string/hint_server_url"
-                    android:textColor="@color/colorTextPrimary"
-                    android:textColorHint="@color/colorTextSecondary"
-                    android:backgroundTint="@color/colorAccent"
-                    android:textSize="14sp"
-                    android:inputType="textUri" />
+                    android:layout_marginBottom="10dp"
+                    android:hint="Server URL"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                    app:boxStrokeColor="@color/colorAccent"
+                    app:hintTextColor="@color/colorAccent"
+                    app:boxCornerRadiusTopStart="12dp"
+                    app:boxCornerRadiusTopEnd="12dp"
+                    app:boxCornerRadiusBottomStart="12dp"
+                    app:boxCornerRadiusBottomEnd="12dp"
+                    android:textColorHint="@color/colorTextSecondary">
 
-                <EditText
-                    android:id="@+id/etAuthToken"
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/etServerUrl"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/colorTextPrimary"
+                        android:textSize="14sp"
+                        android:inputType="textUri" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <!-- Auth Token -->
+                <com.google.android.material.textfield.TextInputLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="@string/hint_auth_token"
-                    android:textColor="@color/colorTextPrimary"
-                    android:textColorHint="@color/colorTextSecondary"
-                    android:backgroundTint="@color/colorAccent"
-                    android:textSize="14sp"
-                    android:inputType="textPassword" />
+                    android:layout_marginBottom="10dp"
+                    android:hint="Authentication Token"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                    app:boxStrokeColor="@color/colorAccent"
+                    app:hintTextColor="@color/colorAccent"
+                    app:boxCornerRadiusTopStart="12dp"
+                    app:boxCornerRadiusTopEnd="12dp"
+                    app:boxCornerRadiusBottomStart="12dp"
+                    app:boxCornerRadiusBottomEnd="12dp"
+                    android:textColorHint="@color/colorTextSecondary">
 
-                <EditText
-                    android:id="@+id/etDeviceName"
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/etAuthToken"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/colorTextPrimary"
+                        android:textSize="14sp"
+                        android:inputType="textPassword" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <!-- Device Name -->
+                <com.google.android.material.textfield.TextInputLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="@string/hint_device_name"
-                    android:textColor="@color/colorTextPrimary"
-                    android:textColorHint="@color/colorTextSecondary"
-                    android:backgroundTint="@color/colorAccent"
-                    android:textSize="14sp"
-                    android:inputType="text" />
+                    android:layout_marginBottom="16dp"
+                    android:hint="Device Identifier"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                    app:boxStrokeColor="@color/colorAccent"
+                    app:hintTextColor="@color/colorAccent"
+                    app:boxCornerRadiusTopStart="12dp"
+                    app:boxCornerRadiusTopEnd="12dp"
+                    app:boxCornerRadiusBottomStart="12dp"
+                    app:boxCornerRadiusBottomEnd="12dp"
+                    android:textColorHint="@color/colorTextSecondary">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/etDeviceName"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textColor="@color/colorTextPrimary"
+                        android:textSize="14sp"
+                        android:inputType="text" />
+                </com.google.android.material.textfield.TextInputLayout>
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_marginTop="8dp">
+                    android:orientation="horizontal">
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnAccessibility"
@@ -102,20 +142,22 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:layout_marginEnd="4dp"
-                        android:text="Service"
-                        app:strokeColor="@color/colorTextSecondary"
-                        android:textColor="@color/colorTextSecondary" />
+                        android:layout_marginEnd="6dp"
+                        android:text="System Access"
+                        app:strokeColor="@color/colorAccentPurple"
+                        android:textColor="@color/colorAccentPurpleLight"
+                        app:cornerRadius="12dp" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnSave"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:layout_marginStart="4dp"
-                        android:text="Connect"
+                        android:layout_marginStart="6dp"
+                        android:text="Establish Link"
                         app:backgroundTint="@color/colorAccent"
-                        android:textColor="@color/colorBackground" />
+                        android:textColor="@color/colorBackground"
+                        app:cornerRadius="12dp" />
                 </LinearLayout>
             </LinearLayout>
 
@@ -123,9 +165,10 @@
                 android:id="@+id/btnToggleSettings"
                 android:layout_width="match_parent"
                 android:layout_height="24dp"
-                android:src="@android:drawable/arrow_down_float"
+                android:src="@drawable/ic_chevron_down"
                 app:tint="@color/colorTextSecondary"
-                android:layout_marginTop="8dp" />
+                android:layout_marginTop="12dp"
+                android:scaleType="centerInside" />
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
@@ -135,50 +178,55 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:clipToPadding="false"
-        android:padding="8dp"
+        android:padding="12dp"
         app:layout_constraintTop_toBottomOf="@id/cardSettings"
         app:layout_constraintBottom_toTopOf="@id/layoutInput" />
 
-    <!-- Bottom Input Area -->
+    <!-- Bottom Input Area (Capsule design) -->
     <LinearLayout
         android:id="@+id/layoutInput"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/colorSurface"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:padding="8dp"
+        android:background="@drawable/bg_chat_input"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp"
+        android:layout_marginBottom="12dp"
+        android:padding="6dp"
         app:layout_constraintBottom_toBottomOf="parent">
+
+        <com.google.android.material.floatingactionbutton.FloatingActionButton
+            android:id="@+id/btnMic"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:src="@android:drawable/ic_btn_speak_now"
+            app:backgroundTint="@android:color/transparent"
+            app:tint="@color/colorAccent"
+            app:fabSize="mini"
+            app:elevation="0dp"
+            app:pressedTranslationZ="0dp" />
 
         <EditText
             android:id="@+id/etChatInput"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:background="@drawable/bg_chat_input"
+            android:background="@android:color/transparent"
             android:hint="@string/hint_chat"
             android:textColor="@color/colorTextPrimary"
             android:textColorHint="@color/colorTextSecondary"
-            android:padding="12dp"
+            android:paddingVertical="10dp"
+            android:paddingHorizontal="10dp"
             android:maxLines="4"
             android:textSize="15sp" />
-
-        <com.google.android.material.floatingactionbutton.FloatingActionButton
-            android:id="@+id/btnMic"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:src="@android:drawable/ic_btn_speak_now"
-            app:backgroundTint="@color/colorSurfaceLight"
-            app:tint="@color/colorAccent"
-            app:fabSize="mini"
-            app:elevation="0dp" />
 
         <com.google.android.material.floatingactionbutton.FloatingActionButton
             android:id="@+id/btnSend"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
+            android:layout_marginEnd="4dp"
             android:src="@android:drawable/ic_menu_send"
             app:backgroundTint="@color/colorAccent"
             app:tint="@color/colorBackground"

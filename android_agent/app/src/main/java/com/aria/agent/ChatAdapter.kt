@@ -3,6 +3,7 @@ package com.aria.agent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.RelativeLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
@@ -64,21 +65,26 @@ class ChatAdapter : RecyclerView.Adapter<ChatAdapter.ChatViewHolder>() {
             
             // Apply styling based on sender
             val context = itemView.context
+            val lp = tvMessage.layoutParams as RelativeLayout.LayoutParams
+            val density = context.resources.displayMetrics.density
+            val margin80 = (80 * density).toInt()
+
             if (message.isUser) {
                 tvMessage.setBackgroundResource(R.drawable.bg_chat_user)
                 tvMessage.setTextColor(ContextCompat.getColor(context, android.R.color.white))
-                (tvMessage.layoutParams as ViewGroup.MarginLayoutParams).apply {
-                    marginStart = 120
-                    marginEnd = 32
-                }
+                lp.addRule(RelativeLayout.ALIGN_PARENT_END)
+                lp.removeRule(RelativeLayout.ALIGN_PARENT_START)
+                lp.marginStart = margin80
+                lp.marginEnd = 0
             } else {
                 tvMessage.setBackgroundResource(R.drawable.bg_chat_aria)
                 tvMessage.setTextColor(ContextCompat.getColor(context, R.color.colorAccent)) // Cyan text for ARIA
-                (tvMessage.layoutParams as ViewGroup.MarginLayoutParams).apply {
-                    marginStart = 32
-                    marginEnd = 120
-                }
+                lp.addRule(RelativeLayout.ALIGN_PARENT_START)
+                lp.removeRule(RelativeLayout.ALIGN_PARENT_END)
+                lp.marginStart = 0
+                lp.marginEnd = margin80
             }
+            tvMessage.layoutParams = lp
             itemView.requestLayout()
         }
     }
