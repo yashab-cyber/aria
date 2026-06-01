@@ -35,26 +35,48 @@ chatInput.addEventListener('keydown', (e) => {
 });
 
 // Audio Playback
-const audioQueue: string[] = [];
+interface AudioQueueItem {
+  text: string;
+  url: string;
+}
+const audioQueue: AudioQueueItem[] = [];
 let isPlaying = false;
+
+function appendOrUpdateAssistantText(text: string) {
+  if (!state.currentAssistantMessageElement) {
+    state.currentAssistantMessageElement = createMessageElement('aria');
+    chatHistory.appendChild(state.currentAssistantMessageElement);
+  }
+  const contentEl = state.currentAssistantMessageElement.querySelector('.content-body') as HTMLElement;
+  const currentRaw = contentEl.getAttribute('data-raw') || '';
+  const space = currentRaw ? ' ' : '';
+  const newRaw = currentRaw + space + text;
+  contentEl.setAttribute('data-raw', newRaw);
+  contentEl.innerHTML = marked.parse(newRaw) as string;
+  scrollToBottom();
+}
+
 function playNextAudio() {
   if (audioQueue.length === 0) {
     isPlaying = false;
     aiCore.className = 'ai-core idle';
+    if (!state.isGenerating) {
+      state.currentAssistantMessageElement = null;
+    }
     return;
   }
   isPlaying = true;
   aiCore.className = 'ai-core speaking';
-  const url = audioQueue.shift()!;
-  const audio = new Audio(url);
-  audio.onended = () => { URL.revokeObjectURL(url); playNextAudio(); };
+  const item = audioQueue.shift()!;
+  
+  if (item.text) {
+    appendOrUpdateAssistantText(item.text);
+  }
+  
+  const audio = new Audio(item.url);
+  audio.onended = () => { URL.revokeObjectURL(item.url); playNextAudio(); };
   audio.onerror = () => { playNextAudio(); };
   audio.play().catch(() => { isPlaying = false; });
-}
-function queueAudio(blob: Blob) {
-  const url = URL.createObjectURL(blob);
-  audioQueue.push(url);
-  if (!isPlaying) playNextAudio();
 }
 
 // Microphone
@@ -102,7 +124,9 @@ function connectWebSocket() {
   state.audioSocket.binaryType = 'blob';
   state.audioSocket.onmessage = (event) => {
     if (event.data instanceof Blob) {
-      queueAudio(event.data);
+      const url = URL.createObjectURL(event.data);
+      audioQueue.push({ text: "", url: url });
+      if (!isPlaying) playNextAudio();
     } else {
       const data = JSON.parse(event.data);
       if (data.type === 'transcription') {
@@ -110,7 +134,7 @@ function connectWebSocket() {
         appendUserMessage(data.text);
         state.isGenerating = true;
         updateSendBtn();
-      } else if (data.type === 'chunk' || data.type === 'done' || data.type === 'tool_start' || data.type === 'tool_end') {
+      } else if (data.type === 'chunk' || data.type === 'done' || data.type === 'tool_start' || data.type === 'tool_end' || data.type === 'voice') {
         handleMainSocketMessage({ data: JSON.stringify(data) } as MessageEvent);
       }
     }
@@ -120,6 +144,24 @@ function connectWebSocket() {
 function handleMainSocketMessage(event: MessageEvent) {
   if (event.data instanceof Blob) return;
   const data = JSON.parse(event.data);
+  
+  if (data.type === 'voice') {
+    try {
+      const binaryString = atob(data.audio);
+      const len = binaryString.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      const blob = new Blob([bytes.buffer], { type: 'audio/mp3' });
+      const url = URL.createObjectURL(blob);
+      audioQueue.push({ text: data.text, url: url });
+      if (!isPlaying) playNextAudio();
+    } catch (e) {
+      console.error("Error processing voice message", e);
+    }
+    return;
+  }
   
   if (!state.currentAssistantMessageElement && data.type !== 'done') {
     state.currentAssistantMessageElement = createMessageElement('aria');
@@ -188,7 +230,9 @@ function handleMainSocketMessage(event: MessageEvent) {
       const finalRaw = contentEl.getAttribute('data-raw') || '';
       contentEl.innerHTML = marked.parse(finalRaw) as string;
     }
-    state.currentAssistantMessageElement = null;
+    if (!isPlaying && audioQueue.length === 0) {
+      state.currentAssistantMessageElement = null;
+    }
   }
 }
 
@@ -242,8 +286,14 @@ setInterval(async () => {
   try {
     const res = await fetch(`/api/status`);
     const data = await res.json();
-    document.getElementById('cpu-val')!.textContent = `${data.cpu_percent}%`;
-    document.getElementById('ram-val')!.textContent = `${data.ram_percent}%`;
+    const cpuVal = data.cpu_percent;
+    const ramVal = data.ram_percent;
+    document.getElementById('cpu-val')!.textContent = `${cpuVal}%`;
+    document.getElementById('ram-val')!.textContent = `${ramVal}%`;
+    const cpuBar = document.getElementById('cpu-bar');
+    const ramBar = document.getElementById('ram-bar');
+    if (cpuBar) cpuBar.style.width = `${cpuVal}%`;
+    if (ramBar) ramBar.style.width = `${ramVal}%`;
   } catch (e) {}
 }, 2000);
 

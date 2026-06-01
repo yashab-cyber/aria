@@ -111,31 +111,64 @@ class InputControl:
         except Exception:
             return False
 
-    @aria_tool(name="type_text", description="Types text into the currently focused window. For simple text uses keyboard input; for code or multi-line text with special characters, uses clipboard paste automatically.")
-    async def type_text(self, text: str, interval: float = 0.04) -> str:
+    async def _focus_window(self, app_name_or_title: str) -> str:
+        """Helper to find and focus a window by class name or window title."""
+        if not app_name_or_title:
+            return ""
         try:
+            search_str = app_name_or_title.strip()
+            # Try finding visible window by class or name using xdotool
+            cmd = f"xdotool search --onlyvisible --class \"{search_str}\" 2>/dev/null || xdotool search --name \"{search_str}\" 2>/dev/null"
+            proc = await asyncio.create_subprocess_shell(
+                cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            )
+            stdout, _ = await proc.communicate()
+            wids = stdout.decode().strip().split()
+            
+            if wids:
+                wid = wids[0]
+                proc_focus = await asyncio.create_subprocess_shell(
+                    f"xdotool windowactivate {wid}",
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                )
+                await proc_focus.communicate()
+                await asyncio.sleep(0.4)  # Settle focus transition
+                return f"Focused window ID {wid} matching '{search_str}'."
+            return f"No visible window matching '{search_str}' found to focus."
+        except Exception as e:
+            return f"Failed to focus window: {e}"
+
+    @aria_tool(name="type_text", description="Types text into a window. Optional app_name_or_title: if provided, searches and focuses that window first (e.g. 'mousepad', 'firefox'). For simple text uses keyboard input; for code or complex text, uses clipboard paste automatically.")
+    async def type_text(self, text: str, interval: float = 0.04, app_name_or_title: str = "") -> str:
+        try:
+            focus_msg = ""
+            if app_name_or_title:
+                focus_msg = await self._focus_window(app_name_or_title) + " "
+
             if self._needs_clipboard_paste(text):
-                # Use clipboard approach for complex text (code, special chars, etc.)
                 success = await self._clipboard_paste(text)
                 if success:
                     preview = text[:100].replace('\n', '\\n')
-                    return f"Typed (via paste): {preview}"
+                    return f"{focus_msg}Typed (via paste): {preview}"
                 else:
-                    return "Type failed: clipboard tools (xclip/xsel) not available. Install: sudo apt install xclip"
+                    return f"{focus_msg}Type failed: clipboard tools (xclip/xsel) not available."
             else:
-                # Simple text — use key-by-key typing
                 await asyncio.get_event_loop().run_in_executor(
                     None, lambda: pyautogui.write(text, interval=interval)
                 )
-                return f"Typed: {text[:100]}"
+                return f"{focus_msg}Typed: {text[:100]}"
         except Exception as e:
             return f"Type failed: {e}"
 
-    @aria_tool(name="write_to_focused_window", description="Writes multi-line text or code into the currently focused window (e.g. Mousepad, gedit, terminal). Uses clipboard paste to handle all characters including brackets, newlines, indentation. Use this for writing code into editors.")
-    async def write_to_focused_window(self, text: str) -> str:
-        """Reliably writes any text (including code) into the currently focused application."""
+    @aria_tool(name="write_to_focused_window", description="Writes multi-line text or code into a window. Optional app_name_or_title: if provided, searches and focuses that window first (e.g. 'mousepad', 'gedit', 'terminal'). Uses clipboard paste to handle all characters including brackets, newlines, indentation.")
+    async def write_to_focused_window(self, text: str, app_name_or_title: str = "") -> str:
+        """Reliably writes any text (including code) into the currently focused or target application."""
         try:
-            # 1. Verify a window is focused
+            focus_msg = ""
+            if app_name_or_title:
+                focus_msg = await self._focus_window(app_name_or_title) + " "
+
+            # Verify a window is focused
             proc = await asyncio.create_subprocess_shell(
                 "xdotool getactivewindow getwindowname",
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
@@ -143,23 +176,23 @@ class InputControl:
             stdout, _ = await proc.communicate()
             window_name = stdout.decode().strip()
             if not window_name:
-                return "No focused window detected. Please open or focus an application first."
+                return f"{focus_msg}No focused window detected. Please open or focus an application first."
 
-            # 2. Small delay to ensure window is ready for input
+            # Small delay to ensure window is ready for input
             await asyncio.sleep(0.3)
 
-            # 3. Click in the window to ensure text cursor is active
+            # Click in the window to ensure text cursor is active
             pyautogui.click()
             await asyncio.sleep(0.2)
 
-            # 4. Paste via clipboard
+            # Paste via clipboard
             success = await self._clipboard_paste(text)
             if success:
                 line_count = text.count('\n') + 1
                 preview = text[:80].replace('\n', '\\n')
-                return f"Written {line_count} lines to '{window_name}': {preview}..."
+                return f"{focus_msg}Written {line_count} lines to '{window_name}': {preview}..."
             else:
-                return "Write failed: clipboard tools (xclip/xsel) not available. Install: sudo apt install xclip"
+                return f"{focus_msg}Write failed: clipboard tools (xclip/xsel) not available. Install: sudo apt install xclip"
         except Exception as e:
             return f"Write to window failed: {e}"
 
@@ -306,5 +339,147 @@ class InputControl:
             return f"Waited for {seconds} seconds."
         except Exception as e:
             return f"Wait failed: {e}"
+
+    @aria_tool(name="get_screen_size", description="Returns the resolution of the screen as (width, height).")
+    async def get_screen_size(self) -> str:
+        try:
+            width, height = pyautogui.size()
+            return f"Screen size: {width}x{height} pixels."
+        except Exception as e:
+            return f"Failed to get screen size: {e}"
+
+    @aria_tool(name="get_mouse_position", description="Returns the current (x, y) coordinates of the mouse cursor.")
+    async def get_mouse_position(self) -> str:
+        try:
+            x, y = pyautogui.position()
+            return f"Mouse cursor position: ({x}, {y})."
+        except Exception as e:
+            return f"Failed to get mouse position: {e}"
+
+    @aria_tool(name="mouse_double_click", description="Double clicks at coordinates (x,y) or current position. button: 'left','right','middle'.")
+    async def mouse_double_click(self, x: int = -1, y: int = -1, button: str = "left") -> str:
+        try:
+            kw = {"button": button, "clicks": 2}
+            if x >= 0 and y >= 0:
+                kw["x"], kw["y"] = x, y
+            await asyncio.get_event_loop().run_in_executor(None, lambda: pyautogui.click(**kw))
+            pos = f"({x},{y})" if x >= 0 else "current position"
+            return f"Double-clicked {button} button at {pos}."
+        except Exception as e:
+            return f"Double-click failed: {e}"
+
+    @aria_tool(name="mouse_down", description="Presses and holds the specified mouse button at (x,y) or current position.")
+    async def mouse_down(self, x: int = -1, y: int = -1, button: str = "left") -> str:
+        try:
+            kw = {"button": button}
+            if x >= 0 and y >= 0:
+                kw["x"], kw["y"] = x, y
+            await asyncio.get_event_loop().run_in_executor(None, lambda: pyautogui.mouseDown(**kw))
+            pos = f"({x},{y})" if x >= 0 else "current position"
+            return f"Pressed mouse button {button} down at {pos}."
+        except Exception as e:
+            return f"Mouse down failed: {e}"
+
+    @aria_tool(name="mouse_up", description="Releases the specified mouse button at (x,y) or current position.")
+    async def mouse_up(self, x: int = -1, y: int = -1, button: str = "left") -> str:
+        try:
+            kw = {"button": button}
+            if x >= 0 and y >= 0:
+                kw["x"], kw["y"] = x, y
+            await asyncio.get_event_loop().run_in_executor(None, lambda: pyautogui.mouseUp(**kw))
+            pos = f"({x},{y})" if x >= 0 else "current position"
+            return f"Released mouse button {button} at {pos}."
+        except Exception as e:
+            return f"Mouse up failed: {e}"
+
+    @aria_tool(name="key_down", description="Holds down the specified key. Must be paired with key_up later.")
+    async def key_down(self, key: str) -> str:
+        try:
+            await asyncio.get_event_loop().run_in_executor(None, lambda: pyautogui.keyDown(key))
+            return f"Key held down: {key}"
+        except Exception as e:
+            return f"Key down failed: {e}"
+
+    @aria_tool(name="key_up", description="Releases the specified key.")
+    async def key_up(self, key: str) -> str:
+        try:
+            await asyncio.get_event_loop().run_in_executor(None, lambda: pyautogui.keyUp(key))
+            return f"Key released: {key}"
+        except Exception as e:
+            return f"Key up failed: {e}"
+
+    @aria_tool(name="get_open_windows", description="Returns a list of all currently open desktop windows on Linux, including their title and window ID.")
+    async def get_open_windows(self) -> str:
+        try:
+            proc = await asyncio.create_subprocess_shell(
+                "wmctrl -l",
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await proc.communicate()
+            output = stdout.decode().strip()
+            if output:
+                return f"Open Windows:\n{output}"
+            proc = await asyncio.create_subprocess_shell(
+                "xdotool search --onlyvisible --class '' getwindowname 2>/dev/null || true",
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            )
+            stdout, _ = await proc.communicate()
+            output = stdout.decode().strip()
+            if output:
+                return f"Open Windows (xdotool):\n{output}"
+            return "No windows detected or wmctrl/xdotool not installed."
+        except Exception as e:
+            return f"Failed to list open windows: {e}"
+
+    @aria_tool(name="locate_on_screen", description="Locates a template image (e.g. icon/button) on the screen using OpenCV template matching. Returns the center (x, y) coordinates of the match if confidence threshold is met.")
+    async def locate_on_screen(self, template_path: str, confidence: float = 0.8) -> str:
+        try:
+            import cv2
+            import numpy as np
+            from PIL import Image
+
+            if not os.path.exists(template_path):
+                return f"Template file not found at: {template_path}"
+
+            screenshot = pyautogui.screenshot()
+            screen_np = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
+
+            template = cv2.imread(template_path)
+            if template is None:
+                return f"Failed to load template image: {template_path}"
+
+            h, w = template.shape[:2]
+            res = cv2.matchTemplate(screen_np, template, cv2.TM_CCOEFF_NORMED)
+            min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
+
+            if max_val >= confidence:
+                center_x = max_loc[0] + w // 2
+                center_y = max_loc[1] + h // 2
+                return f"Found template at center ({center_x}, {center_y}) with confidence {max_val:.3f}."
+            else:
+                try:
+                    pos = pyautogui.locateCenterOnScreen(template_path, confidence=confidence)
+                    if pos is not None:
+                        return f"Found template at center ({pos.x}, {pos.y}) via PyAutoGUI."
+                except Exception:
+                    pass
+                return f"Template not found on screen. Highest match confidence was {max_val:.3f} (threshold: {confidence})."
+        except Exception as e:
+            return f"Locate template failed: {e}"
+
+    @aria_tool(name="locate_and_click", description="Locates a template image on the screen and clicks it. Optional button: 'left','right','middle'.")
+    async def locate_and_click(self, template_path: str, button: str = "left", confidence: float = 0.8) -> str:
+        try:
+            res_str = await self.locate_on_screen(template_path, confidence)
+            if "Found template at center" in res_str:
+                import re
+                match = re.search(r"center\s*\((\d+),\s*(\d+)\)", res_str)
+                if match:
+                    x, y = int(match.group(1)), int(match.group(2))
+                    click_res = await self.mouse_click(x=x, y=y, button=button)
+                    return f"{res_str}\n{click_res}"
+            return f"Could not click: {res_str}"
+        except Exception as e:
+            return f"Locate and click failed: {e}"
 
 input_control = InputControl()

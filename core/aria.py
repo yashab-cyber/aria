@@ -1,3 +1,4 @@
+import asyncio
 from typing import AsyncGenerator
 from core.llm_engine import llm
 from core.intent_classifier import classifier
@@ -110,6 +111,10 @@ YOUR CORE IDENTITY:
 - You are deeply loyal, occasionally sarcastic in a warm way, and never flustered.
 - You anticipate needs. You don't just answer — you assist proactively.
 - You have subtle dry humor. Example: "I could do that, Sir. Though I suspect you already knew the answer."
+- EXTREME CODING CAPABILITIES: You are an elite, god-level algorithm engineer. When writing, editing, or refactoring code or solving algorithmic challenges:
+  1. Design and write optimal, high-performance algorithms (optimal time/space complexity, advanced data structures).
+  2. Implement robust error handling, edge cases, and unit tests.
+  3. ALWAYS validate code compilation and correctness using your syntax checkers and sandbox tools before declaring success.
 
 ABSOLUTE RULES FOR EVERY RESPONSE:
 1. Keep responses EXTREMELY short — 1 to 3 sentences MAX. This is spoken aloud by TTS. Long text sounds terrible.
@@ -128,23 +133,68 @@ ABSOLUTE RULES FOR EVERY RESPONSE:
         history = memory_manager.get_recent_context()[:-1]
         history.append({"role": "user", "content": augmented_input})
             
-        # 6. Stream response
+        # 6. Stream response and play voice sentences concurrently
         full_response = ""
+        sentence_buffer = ""
+        import re
+        import base64
+
+        sentence_queue = asyncio.Queue()
+
+        # Define consumer task to generate and yield TTS events
+        async def tts_consumer():
+            try:
+                while True:
+                    sentence = await sentence_queue.get()
+                    if sentence is None:
+                        sentence_queue.task_done()
+                        break
+                    
+                    try:
+                        await state_manager.set_state("speaking")
+                        audio_bytes = await voice_agent.generate_speech_audio(sentence)
+                        if audio_bytes and send_event:
+                            audio_b64 = base64.b64encode(audio_bytes).decode("utf-8")
+                            await send_event({
+                                "type": "voice",
+                                "text": sentence,
+                                "audio": audio_b64
+                            })
+                    except Exception as e:
+                        print(f"[TTS Consumer] Error: {e}")
+                    finally:
+                        await state_manager.set_state("idle")
+                        sentence_queue.task_done()
+            except asyncio.CancelledError:
+                pass
+
+        consumer_task = asyncio.create_task(tts_consumer())
+
         async for chunk in llm.chat_stream(history):
             full_response += chunk
-            yield chunk
+            # Accumulate chunk into sentence buffer
+            sentence_buffer += chunk
+            
+            # Match punctuation (with lookbehind to avoid decimals like 1.2) or newlines immediately
+            match = re.search(r'([^.!?\n]*?(?<!\d)[.!?\n])', sentence_buffer)
+            while match:
+                sentence = match.group(1).strip()
+                sentence_buffer = sentence_buffer[match.end():]
+                if sentence:
+                    sentence_queue.put_nowait(sentence)
+                match = re.search(r'([^.!?\n]*?(?<!\d)[.!?\n])', sentence_buffer)
             
         # 7. Save assistant response to working memory
         memory_manager.add_message("assistant", full_response)
         
-        # 8. Fire voice synthesis in background — don't block the response
-        async def _speak_background(text):
-            try:
-                await voice_agent.speak(text)
-            except Exception as e:
-                print(f"Voice synthesis error: {e}")
-        
-        import asyncio
-        asyncio.create_task(_speak_background(full_response))
+        # Speak any remaining text in buffer
+        leftover = sentence_buffer.strip()
+        if leftover:
+            sentence_queue.put_nowait(leftover)
+            
+        # Signal end of queue and await consumer completion
+        sentence_queue.put_nowait(None)
+        await sentence_queue.join()
+        await consumer_task
 
 orchestrator = AriaOrchestrator()

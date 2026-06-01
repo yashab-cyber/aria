@@ -37,6 +37,11 @@ Available tools:
 {tools_str}
 
 Create a logical step-by-step plan. Ensure dependencies are correct.
+
+[CODING & ALGORITHMIC RULES]: If the objective involves writing, editing, or refactoring code or implementing algorithms:
+1. Always break down the task into design, implementation, and verification steps.
+2. ALWAYS include a step to run syntax/compilation checks (`run_syntax_check`) on the modified code.
+3. ALWAYS include a step to run project unit tests (`run_project_tests`) or execute the script in a sandbox (`run_python_code`) to verify its output and correctness.
 """
         response = await acompletion(
             model=llm.model,
@@ -204,6 +209,11 @@ Available tools:
 {tools_str}
 
 Generate a REVISED plan that addresses ALL of the feedback above. Ensure dependencies are correct.
+
+[CODING & ALGORITHMIC RULES]: If the objective involves writing, editing, or refactoring code or implementing algorithms:
+1. Always break down the task into design, implementation, and verification steps.
+2. ALWAYS include a step to run syntax/compilation checks (`run_syntax_check`) on the modified code.
+3. ALWAYS include a step to run project unit tests (`run_project_tests`) or execute the script in a sandbox (`run_python_code`) to verify its output and correctness.
 """
         response = await acompletion(
             model=llm.model,
@@ -252,6 +262,11 @@ Available tools:
 
 Generate a NEW plan that takes a different approach to achieve the objective. Learn from the failures above.
 Ensure dependencies are correct.
+
+[CODING & ALGORITHMIC RULES]: If the objective involves writing, editing, or refactoring code or implementing algorithms:
+1. Always break down the task into design, implementation, and verification steps.
+2. ALWAYS include a step to run syntax/compilation checks (`run_syntax_check`) on the modified code.
+3. ALWAYS include a step to run project unit tests (`run_project_tests`) or execute the script in a sandbox (`run_python_code`) to verify its output and correctness.
 """
         response = await acompletion(
             model=llm.model,

@@ -25,6 +25,7 @@ import modules.voice
 import modules.system.shell
 import modules.system.file_manager
 import modules.coding.sandbox
+import modules.coding.dev_tools
 import modules.system.input_control
 import modules.scheduler
 import modules.notifications

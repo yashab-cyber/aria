@@ -5,7 +5,7 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>A.R.I.A. Interface</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   </head>
   <body>
     <!-- Cyber Grid Overlay -->
@@ -47,8 +47,24 @@
 
         <div class="sidebar-bottom">
           <div class="system-stats" id="sys-stats">
-            <div class="stat"><i data-lucide="activity"></i> CPU: <span id="cpu-val">--%</span></div>
-            <div class="stat"><i data-lucide="memory-stick"></i> RAM: <span id="ram-val">--%</span></div>
+            <div class="stat-card">
+              <div class="stat-header">
+                <span><i data-lucide="activity"></i> CPU</span>
+                <span id="cpu-val">--%</span>
+              </div>
+              <div class="progress-bar-container">
+                <div class="progress-bar" id="cpu-bar" style="width: 0%"></div>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-header">
+                <span><i data-lucide="memory-stick"></i> RAM</span>
+                <span id="ram-val">--%</span>
+              </div>
+              <div class="progress-bar-container">
+                <div class="progress-bar" id="ram-bar" style="width: 0%"></div>
+              </div>
+            </div>
           </div>
         </div>
       </aside>

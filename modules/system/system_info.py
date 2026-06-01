@@ -144,5 +144,107 @@ class SystemMonitor:
         except Exception as e:
             return f"Resolution detection failed: {e}"
 
+    @aria_tool(name="manage_system_service", description="Manages a systemd service. action: 'start','stop','restart','status','enable','disable'.")
+    async def manage_system_service(self, service_name: str, action: str = "status") -> str:
+        actions = ["start", "stop", "restart", "status", "enable", "disable"]
+        if action.lower() not in actions:
+            return f"Invalid action: '{action}'. Use one of: {', '.join(actions)}."
+        try:
+            cmd = f"systemctl {action.lower()} {service_name}"
+            proc = await asyncio.create_subprocess_shell(
+                cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await proc.communicate()
+            out = stdout.decode().strip()
+            err = stderr.decode().strip()
+            
+            result = f"Service '{service_name}' → {action} (Exit Code: {proc.returncode})"
+            if out:
+                result += f"\nOutput:\n{out}"
+            if err:
+                result += f"\nError:\n{err}"
+            return result
+        except Exception as e:
+            return f"Service management failed: {e}"
+
+    @aria_tool(name="get_listening_ports", description="Lists all TCP and UDP ports currently listening on the system, with the associated process names.")
+    async def get_listening_ports(self) -> str:
+        try:
+            proc = await asyncio.create_subprocess_shell(
+                "ss -tulpn 2>/dev/null || ss -tulp || netstat -tulpn 2>/dev/null",
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            )
+            stdout, _ = await proc.communicate()
+            out = stdout.decode().strip()
+            if out:
+                return f"Active Listening Ports:\n{out}"
+            
+            lines = ["Active Connections (psutil fallback):", "Proto | Local Address | Remote Address | Status | PID"]
+            conns = psutil.net_connections(kind='inet')
+            for c in conns:
+                if c.status == 'LISTEN':
+                    proto = "TCP" if c.type == 1 else "UDP"
+                    local = f"{c.laddr.ip}:{c.laddr.port}"
+                    remote = f"{c.raddr.ip}:{c.raddr.port}" if c.raddr else "*:*"
+                    pid = str(c.pid) if c.pid else "-"
+                    lines.append(f"{proto} | {local} | {remote} | {c.status} | {pid}")
+            return "\n".join(lines)
+        except Exception as e:
+            return f"Failed to get listening ports: {e}"
+
+    @aria_tool(name="system_power_action", description="Performs system power actions. action: 'lock','suspend','reboot','shutdown'.")
+    async def system_power_action(self, action: str) -> str:
+        action = action.lower()
+        commands = {
+            "lock": "xdg-screensaver lock || gnome-screensaver-command -l || dbus-send --type=method_call --dest=org.gnome.ScreenSaver /org/gnome/ScreenSaver org.gnome.ScreenSaver.Lock || light-locker-command -l || loginctl lock-session",
+            "suspend": "systemctl suspend || pm-suspend",
+            "reboot": "systemctl reboot || reboot",
+            "shutdown": "systemctl poweroff || shutdown -h now"
+        }
+        if action not in commands:
+            return f"Invalid power action: '{action}'. Use one of: lock, suspend, reboot, shutdown."
+        try:
+            cmd = commands[action]
+            proc = await asyncio.create_subprocess_shell(
+                cmd,
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            )
+            await asyncio.sleep(0.5)
+            return f"Power action '{action}' triggered."
+        except Exception as e:
+            return f"Power action failed: {e}"
+
+    @aria_tool(name="scan_local_network", description="Scans the local subnet to identify active devices and IP addresses.")
+    async def scan_local_network(self) -> str:
+        try:
+            addrs = psutil.net_if_addrs()
+            subnet = ""
+            for iface, addr_list in addrs.items():
+                for addr in addr_list:
+                    if addr.family.name == "AF_INET" and not addr.address.startswith("127."):
+                        parts = addr.address.split('.')
+                        if len(parts) == 4:
+                            subnet = ".".join(parts[:3]) + ".0/24"
+                            break
+            
+            result = f"Scanning subnet: {subnet or 'unknown'}\n\n"
+            
+            proc = await asyncio.create_subprocess_shell(
+                "arp -a || ip neigh show || route -n",
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            )
+            stdout, _ = await proc.communicate()
+            arp_out = stdout.decode().strip()
+            
+            if arp_out:
+                result += "Subnet Neighbors Cache:\n" + arp_out
+            else:
+                result += "No network neighbors discovered."
+            return result
+        except Exception as e:
+            return f"Network scan failed: {e}"
+
 
 sys_monitor = SystemMonitor()
