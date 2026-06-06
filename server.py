@@ -5,6 +5,7 @@ import tempfile
 import traceback
 import dotenv
 
+from fastapi import FastAPI, WebSocket, WebSocketDisco
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
@@ -29,6 +30,8 @@ import modules.coding.dev_tools
 import modules.system.input_control
 import modules.scheduler
 import modules.notifications
+import modules.email.email_manager
+import modules.system.media_converter
 
 app = FastAPI(title="A.R.I.A. API")
 
