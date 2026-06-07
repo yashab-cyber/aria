@@ -5,7 +5,6 @@ import tempfile
 import traceback
 import dotenv
 
-from fastapi import FastAPI, WebSocket, WebSocketDisco
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
@@ -77,6 +76,113 @@ async def delete_memory_session(session_id: str):
         return {"status": "success"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+@app.get("/api/memory/graph")
+async def get_memory_graph():
+    """Generates a node-link graph representation of ARIA's memory & knowledge."""
+    import time
+    nodes = []
+    links = []
+    
+    # 1. Central Core Node
+    nodes.append({
+        "id": "core",
+        "label": "A.R.I.A. Core",
+        "type": "core",
+        "size": 25,
+        "details": "Central cognitive and processing core."
+    })
+    
+    # 2. Fetch Knowledge Base facts
+    try:
+        from memory.vector_store import store
+        kb_col = store._get_collection("knowledge_base")
+        kb_data = kb_col.get()
+        if kb_data and "documents" in kb_data:
+            docs = kb_data["documents"]
+            metas = kb_data.get("metadatas", []) or []
+            ids = kb_data.get("ids", []) or []
+            for i, (doc, id_) in enumerate(zip(docs, ids)):
+                meta = metas[i] if i < len(metas) else {}
+                nodes.append({
+                    "id": f"fact_{id_}",
+                    "label": doc[:40] + ("..." if len(doc) > 40 else ""),
+                    "type": "fact",
+                    "size": 12,
+                    "details": doc,
+                    "category": meta.get("category", "general")
+                })
+                links.append({
+                    "source": "core",
+                    "target": f"fact_{id_}",
+                    "type": "knowledge"
+                })
+    except Exception as e:
+        print(f"[GraphAPI] Failed to fetch facts: {e}")
+        
+    # 3. Fetch Episodic Memory sessions
+    try:
+        sessions = memory_manager.episodic.get_session_summaries(n=20)
+        for s in sessions:
+            meta = s.get("metadata", {})
+            session_id = meta.get("session_id", "")
+            summary = s.get("summary", "")
+            if session_id:
+                nodes.append({
+                    "id": f"session_{session_id}",
+                    "label": f"Session {session_id[:8]}",
+                    "type": "session",
+                    "size": 15,
+                    "details": summary,
+                    "timestamp": meta.get("timestamp", time.time())
+                })
+                links.append({
+                    "source": "core",
+                    "target": f"session_{session_id}",
+                    "type": "history"
+                })
+    except Exception as e:
+        print(f"[GraphAPI] Failed to fetch sessions: {e}")
+        
+    # 4. Fetch Workflows (Procedural Memory)
+    try:
+        workflows = memory_manager.procedural.get_top_workflows(n=10)
+        for wf in workflows:
+            wf_id = wf.get("id", "")
+            if wf_id:
+                nodes.append({
+                    "id": f"wf_{wf_id}",
+                    "label": wf.get("name", "Workflow"),
+                    "type": "workflow",
+                    "size": 18,
+                    "details": f"Description: {wf.get('description', '')}\nSuccess Rate: {wf.get('success_rate', 0.0):.0%}",
+                    "success_rate": wf.get("success_rate", 1.0)
+                })
+                links.append({
+                    "source": "core",
+                    "target": f"wf_{wf_id}",
+                    "type": "procedure"
+                })
+    except Exception as e:
+        print(f"[GraphAPI] Failed to fetch workflows: {e}")
+
+    # Build semantic relations between sessions and facts
+    fact_nodes = [n for n in nodes if n["type"] == "fact"]
+    session_nodes = [n for n in nodes if n["type"] == "session"]
+    for fn in fact_nodes:
+        fact_text_lower = fn["details"].lower()
+        for sn in session_nodes:
+            words = [w for w in fact_text_lower.split() if len(w) > 4]
+            if words:
+                match_count = sum(1 for w in words if w in sn["details"].lower())
+                if match_count >= 2:
+                    links.append({
+                        "source": sn["id"],
+                        "target": fn["id"],
+                        "type": "reference"
+                    })
+        
+    return {"nodes": nodes, "links": links}
 
 # ── Config / Settings Endpoints ──
 

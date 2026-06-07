@@ -40,6 +40,7 @@
         <nav class="nav-links">
           <button class="nav-btn active" id="nav-chat"><i data-lucide="message-square"></i> Chat Interface</button>
           <button class="nav-btn" id="nav-analyzer"><i data-lucide="scan-eye"></i> Screen Analyzer</button>
+          <button class="nav-btn" id="nav-graph"><i data-lucide="network"></i> Brain Graph</button>
           <button class="nav-btn" id="nav-memory"><i data-lucide="database"></i> Memory Browser</button>
           <button class="nav-btn" id="voice-config-btn"><i data-lucide="mic-2"></i> Voice Settings</button>
           <button class="nav-btn" id="nav-settings"><i data-lucide="settings"></i> System Settings</button>
@@ -148,6 +149,35 @@
               <input type="text" id="analyzer-query-input" placeholder="Ask about this screen..." />
               <button id="btn-send-query" title="Query"><i data-lucide="arrow-up"></i></button>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Brain Graph Pane -->
+      <section id="graph-pane" class="graph-pane hidden">
+        <div class="graph-header">
+          <div class="graph-title">
+            <i data-lucide="network"></i>
+            <h2>Cognitive Brain Graph</h2>
+          </div>
+          <button id="btn-refresh-graph" class="icon-btn-text" title="Refresh Graph"><i data-lucide="refresh-cw"></i> Refresh</button>
+        </div>
+
+        <div class="graph-content">
+          <div class="canvas-container">
+            <canvas id="brain-canvas"></canvas>
+            <div id="graph-tooltip" class="graph-tooltip hidden"></div>
+          </div>
+          <div class="graph-legend">
+            <span class="legend-item"><span class="legend-dot core"></span> Core</span>
+            <span class="legend-item"><span class="legend-dot fact"></span> Facts</span>
+            <span class="legend-item"><span class="legend-dot session"></span> Sessions</span>
+            <span class="legend-item"><span class="legend-dot workflow"></span> Workflows</span>
+          </div>
+          <div id="graph-node-details" class="graph-node-details hidden">
+            <h3>Node Details</h3>
+            <div class="detail-type" id="node-detail-type">--</div>
+            <div class="detail-desc" id="node-detail-desc">Select a node to inspect...</div>
           </div>
         </div>
       </section>

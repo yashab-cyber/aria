@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "electron": "electron electron.cjs --dev"
+    "electron": "electron electron.cjs --no-sandbox --disable-dev-shm-usage --disable-gpu --disable-software-rasterizer --disable-gpu-compositing --disable-vulkan --log-level=3 --dev"
   },
   "devDependencies": {
     "@vitejs/plugin-basic-ssl": "^2.3.0",

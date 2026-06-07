@@ -288,7 +288,7 @@ Summary:"""
                     try:
                         self.store.delete_from_collection(
                             "conversations",
-                            where={"session_id": session_id, "type": "message"},
+                            where={"$and": [{"session_id": session_id}, {"type": "message"}]},
                         )
                         summarized += 1
                     except Exception as e:

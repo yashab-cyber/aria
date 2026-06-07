@@ -1,8 +1,15 @@
 const { app, BrowserWindow } = require('electron');
 const path = require('path');
 
+// Disable GPU / Hardware acceleration to bypass permission/driver issues with /dev/dri
+app.disableHardwareAcceleration();
+
 // Disable security warning for local self-signed SSL certs
 app.commandLine.appendSwitch('ignore-certificate-errors');
+// Disable sandbox if running in restricted permission environments (like Kali root/Docker)
+app.commandLine.appendSwitch('no-sandbox');
+// Disable /dev/shm usage and fallback to temporary files for shared memory
+app.commandLine.appendSwitch('disable-dev-shm-usage');
 
 function createWindow() {
   const win = new BrowserWindow({

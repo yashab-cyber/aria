@@ -688,7 +688,386 @@ navAnalyzerBtn.addEventListener('click', () => {
   navAnalyzerBtn.classList.toggle('active', !isHidden);
   
   if (!isHidden) {
+    graphPane.classList.add('hidden');
+    navGraphBtn.classList.remove('active');
+    if (graphSimulation) {
+      graphSimulation.stop();
+    }
     connectAnalyzerWebSocket();
+  } else {
+    if (analyzerSocket) {
+      analyzerSocket.close();
+    }
+  }
+});
+
+// --- Brain Graph Frontend Logic ---
+interface GraphNode {
+  id: string;
+  label: string;
+  type: 'core' | 'fact' | 'session' | 'workflow';
+  size: number;
+  details: string;
+  category?: string;
+  success_rate?: number;
+  timestamp?: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  fx?: number | null;
+  fy?: number | null;
+}
+
+interface GraphLink {
+  source: string;
+  target: string;
+  type: 'knowledge' | 'history' | 'procedure' | 'reference';
+}
+
+class GraphSimulation {
+  canvas: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D;
+  nodes: GraphNode[] = [];
+  links: GraphLink[] = [];
+  nodeMap: Map<string, GraphNode> = new Map();
+  selectedNode: GraphNode | null = null;
+  hoveredNode: GraphNode | null = null;
+  draggedNode: GraphNode | null = null;
+  animationFrameId: number | null = null;
+  width = 500;
+  height = 380;
+  tooltip: HTMLElement;
+  detailCard: HTMLElement;
+  detailType: HTMLElement;
+  detailDesc: HTMLElement;
+
+  constructor(canvasId: string) {
+    this.canvas = document.getElementById(canvasId) as HTMLCanvasElement;
+    this.ctx = this.canvas.getContext('2d')!;
+    this.tooltip = document.getElementById('graph-tooltip')!;
+    this.detailCard = document.getElementById('graph-node-details')!;
+    this.detailType = document.getElementById('node-detail-type')!;
+    this.detailDesc = document.getElementById('node-detail-desc')!;
+
+    this.setupEvents();
+    this.resize();
+    window.addEventListener('resize', () => this.resize());
+  }
+
+  resize() {
+    if (!this.canvas) return;
+    const parent = this.canvas.parentElement;
+    if (!parent) return;
+    const rect = parent.getBoundingClientRect();
+    this.width = rect.width || 500;
+    this.height = rect.height || 380;
+    this.canvas.width = this.width * window.devicePixelRatio;
+    this.canvas.height = this.height * window.devicePixelRatio;
+    this.ctx.resetTransform();
+    this.ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+  }
+
+  setData(nodes: any[], links: any[]) {
+    this.nodes = nodes.map(n => {
+      const existing = this.nodeMap.get(n.id);
+      return {
+        ...n,
+        x: existing ? existing.x : this.width / 2 + (Math.random() - 0.5) * 100,
+        y: existing ? existing.y : this.height / 2 + (Math.random() - 0.5) * 100,
+        vx: existing ? existing.vx : 0,
+        vy: existing ? existing.vy : 0
+      };
+    });
+    this.links = links;
+    this.nodeMap.clear();
+    this.nodes.forEach(n => this.nodeMap.set(n.id, n));
+    this.selectedNode = null;
+    this.hoveredNode = null;
+    this.detailCard.classList.add('hidden');
+  }
+
+  setupEvents() {
+    this.canvas.addEventListener('mousemove', (e) => {
+      const rect = this.canvas.getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+
+      if (this.draggedNode) {
+        this.draggedNode.fx = mx;
+        this.draggedNode.fy = my;
+        this.draggedNode.x = mx;
+        this.draggedNode.y = my;
+        return;
+      }
+
+      this.hoveredNode = null;
+      for (const node of this.nodes) {
+        const dist = Math.hypot(node.x - mx, node.y - my);
+        if (dist < node.size + 4) {
+          this.hoveredNode = node;
+          break;
+        }
+      }
+
+      if (this.hoveredNode) {
+        this.canvas.style.cursor = 'pointer';
+        this.tooltip.classList.remove('hidden');
+        this.tooltip.style.left = `${mx + 15}px`;
+        this.tooltip.style.top = `${my + 15}px`;
+        this.tooltip.textContent = this.hoveredNode.label;
+      } else {
+        this.canvas.style.cursor = 'default';
+        this.tooltip.classList.add('hidden');
+      }
+    });
+
+    this.canvas.addEventListener('mousedown', () => {
+      if (this.hoveredNode) {
+        this.draggedNode = this.hoveredNode;
+        this.draggedNode.fx = this.draggedNode.x;
+        this.draggedNode.fy = this.draggedNode.y;
+        this.selectedNode = this.draggedNode;
+        this.showDetails(this.selectedNode);
+      }
+    });
+
+    const releaseDrag = () => {
+      if (this.draggedNode) {
+        this.draggedNode.fx = null;
+        this.draggedNode.fy = null;
+        this.draggedNode = null;
+      }
+    };
+
+    this.canvas.addEventListener('mouseup', releaseDrag);
+    this.canvas.addEventListener('mouseleave', () => {
+      releaseDrag();
+      this.hoveredNode = null;
+      this.tooltip.classList.add('hidden');
+    });
+  }
+
+  showDetails(node: GraphNode) {
+    this.detailCard.classList.remove('hidden');
+    this.detailType.textContent = node.type;
+    this.detailType.className = `detail-type ${node.type}`;
+    this.detailDesc.textContent = node.details || node.label;
+  }
+
+  start() {
+    this.resize();
+    if (this.animationFrameId) cancelAnimationFrame(this.animationFrameId);
+    const step = () => {
+      this.tick();
+      this.draw();
+      this.animationFrameId = requestAnimationFrame(step);
+    };
+    this.animationFrameId = requestAnimationFrame(step);
+  }
+
+  stop() {
+    if (this.animationFrameId) {
+      cancelAnimationFrame(this.animationFrameId);
+      this.animationFrameId = null;
+    }
+  }
+
+  tick() {
+    const k = 0.08;
+    const gravity = 0.03;
+    const friction = 0.85;
+
+    // Apply link forces
+    for (const link of this.links) {
+      const source = this.nodeMap.get(link.source);
+      const target = this.nodeMap.get(link.target);
+      if (!source || !target) continue;
+
+      const dx = target.x - source.x;
+      const dy = target.y - source.y;
+      const dist = Math.hypot(dx, dy) || 0.001;
+      const desiredDist = link.type === 'reference' ? 120 : 70;
+      const force = (dist - desiredDist) * k * 0.5;
+
+      const fx = (dx / dist) * force;
+      const fy = (dy / dist) * force;
+
+      source.vx += fx;
+      source.vy += fy;
+      target.vx -= fx;
+      target.vy -= fy;
+    }
+
+    // Repulsion forces
+    for (let i = 0; i < this.nodes.length; i++) {
+      const n1 = this.nodes[i];
+      for (let j = i + 1; j < this.nodes.length; j++) {
+        const n2 = this.nodes[j];
+        const dx = n2.x - n1.x;
+        const dy = n2.y - n1.y;
+        const dist = Math.hypot(dx, dy) || 0.001;
+        const minDist = n1.size + n2.size + 40;
+        if (dist < minDist) {
+          const force = (minDist - dist) * 0.12;
+          const fx = (dx / dist) * force;
+          const fy = (dy / dist) * force;
+          n1.vx -= fx;
+          n1.vy -= fy;
+          n2.vx += fx;
+          n2.vy += fy;
+        }
+      }
+    }
+
+    // Update positions
+    const cx = this.width / 2;
+    const cy = this.height / 2;
+    for (const node of this.nodes) {
+      if (node.fx != null && node.fy != null) {
+        node.x = node.fx;
+        node.y = node.fy;
+        node.vx = 0;
+        node.vy = 0;
+        continue;
+      }
+
+      node.vx += (cx - node.x) * gravity;
+      node.vy += (cy - node.y) * gravity;
+
+      node.x += node.vx;
+      node.y += node.vy;
+
+      node.vx *= friction;
+      node.vy *= friction;
+
+      const padding = node.size + 5;
+      node.x = Math.max(padding, Math.min(this.width - padding, node.x));
+      node.y = Math.max(padding, Math.min(this.height - padding, node.y));
+    }
+  }
+
+  draw() {
+    this.ctx.clearRect(0, 0, this.width, this.height);
+
+    // Draw Links
+    this.ctx.lineWidth = 1.2;
+    for (const link of this.links) {
+      const source = this.nodeMap.get(link.source);
+      const target = this.nodeMap.get(link.target);
+      if (!source || !target) continue;
+
+      this.ctx.beginPath();
+      this.ctx.moveTo(source.x, source.y);
+      this.ctx.lineTo(target.x, target.y);
+
+      if (link.type === 'reference') {
+        this.ctx.strokeStyle = 'rgba(0, 240, 255, 0.15)';
+        this.ctx.setLineDash([4, 4]);
+      } else {
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+        this.ctx.setLineDash([]);
+      }
+      this.ctx.stroke();
+    }
+    this.ctx.setLineDash([]);
+
+    // Draw Nodes
+    for (const node of this.nodes) {
+      this.ctx.beginPath();
+      this.ctx.arc(node.x, node.y, node.size, 0, Math.PI * 2);
+
+      let color = '#fff';
+      let glowColor = 'rgba(255,255,255,0.2)';
+      if (node.type === 'core') {
+        color = '#ff007f';
+        glowColor = 'rgba(255, 0, 127, 0.6)';
+      } else if (node.type === 'fact') {
+        color = '#00e676';
+        glowColor = 'rgba(0, 230, 118, 0.4)';
+      } else if (node.type === 'session') {
+        color = '#2979ff';
+        glowColor = 'rgba(41, 121, 255, 0.4)';
+      } else if (node.type === 'workflow') {
+        color = '#ffea00';
+        glowColor = 'rgba(255, 234, 0, 0.4)';
+      }
+
+      this.ctx.fillStyle = color;
+      
+      if (node === this.hoveredNode || node === this.selectedNode) {
+        this.ctx.shadowColor = color;
+        this.ctx.shadowBlur = 12;
+      } else {
+        this.ctx.shadowBlur = 0;
+      }
+
+      this.ctx.fill();
+      this.ctx.shadowBlur = 0;
+
+      this.ctx.beginPath();
+      this.ctx.arc(node.x, node.y, node.size + 3, 0, Math.PI * 2);
+      this.ctx.strokeStyle = glowColor;
+      this.ctx.lineWidth = 1;
+      this.ctx.stroke();
+    }
+  }
+}
+
+const navGraphBtn = document.getElementById('nav-graph') as HTMLButtonElement;
+const graphPane = document.getElementById('graph-pane')!;
+const btnRefreshGraph = document.getElementById('btn-refresh-graph') as HTMLButtonElement;
+let graphSimulation: GraphSimulation | null = null;
+
+async function loadGraphData() {
+  try {
+    const res = await fetch('/api/memory/graph');
+    const data = await res.json();
+    if (graphSimulation) {
+      graphSimulation.setData(data.nodes, data.links);
+    }
+  } catch (e) {
+    console.error('Failed to load graph data:', e);
+  }
+}
+
+navGraphBtn.addEventListener('click', () => {
+  const isHidden = graphPane.classList.toggle('hidden');
+  navGraphBtn.classList.toggle('active', !isHidden);
+  
+  if (!isHidden) {
+    analyzerPane.classList.add('hidden');
+    navAnalyzerBtn.classList.remove('active');
+    if (analyzerSocket) {
+      analyzerSocket.close();
+    }
+    
+    if (!graphSimulation) {
+      graphSimulation = new GraphSimulation('brain-canvas');
+    }
+    graphSimulation.start();
+    loadGraphData();
+  } else {
+    if (graphSimulation) {
+      graphSimulation.stop();
+    }
+  }
+});
+
+btnRefreshGraph.addEventListener('click', loadGraphData);
+
+// Chat Interface button closes other panels
+document.getElementById('nav-chat')?.addEventListener('click', () => {
+  analyzerPane.classList.add('hidden');
+  navAnalyzerBtn.classList.remove('active');
+  if (analyzerSocket) {
+    analyzerSocket.close();
+  }
+  
+  graphPane.classList.add('hidden');
+  navGraphBtn.classList.remove('active');
+  if (graphSimulation) {
+    graphSimulation.stop();
   }
 });
 
